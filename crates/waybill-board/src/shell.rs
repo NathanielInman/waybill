@@ -140,7 +140,8 @@ impl Shell {
         // a card never reflows the board under it.
         let reveal = gtk::Revealer::new();
         reveal.set_transition_type(gtk::RevealerTransitionType::SlideLeft);
-        reveal.set_transition_duration(220);
+        // A screenshot is one frame: the pane must already be there.
+        reveal.set_transition_duration(if charts::animated() { 220 } else { 0 });
         reveal.set_child(Some(&detail.root));
         reveal.set_halign(gtk::Align::End);
         let middle = gtk::Overlay::new();
