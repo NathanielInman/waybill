@@ -94,6 +94,9 @@ pub struct Card {
     pub waits_on: Vec<String>,
     /// Visits per day over the last two weeks, oldest first.
     pub activity: Vec<u16>,
+    /// Who holds a started card. Filled in from the claims, after the build.
+    #[serde(default)]
+    pub hold: Option<crate::claim::Hold>,
 }
 
 impl Card {
@@ -358,6 +361,7 @@ pub fn build(
             frees: if t.open() { frees(&t.uuid) } else { vec![] },
             waits_on: t.depends.iter().filter(|d| open(d)).cloned().collect(),
             activity,
+            hold: None,
         });
     }
     // Newest first; within one second, a closing "done" reads above its visit.

@@ -45,6 +45,24 @@ pub fn style_file() -> PathBuf {
     config_dir().join("style.css")
 }
 
+/// Per-user directory for claims and the drawer's socket. It is emptied by a
+/// reboot, which is the point: a claim does not outlive the session's machine.
+pub fn runtime_dir() -> PathBuf {
+    if let Some(d) = env_dir("WAYBILL_RUNTIME_DIR") {
+        return d;
+    }
+    if let Some(d) = env_dir("XDG_RUNTIME_DIR") {
+        return d.join("waybill");
+    }
+    let base = env_dir("TMPDIR").unwrap_or_else(|| PathBuf::from("/tmp"));
+    #[cfg(unix)]
+    // SAFETY: getuid has no failure mode.
+    let uid = unsafe { libc::getuid() };
+    #[cfg(not(unix))]
+    let uid = 0;
+    base.join(format!("waybill-{uid}"))
+}
+
 /// Waybar's config directory.
 pub fn waybar_dir() -> PathBuf {
     xdg_config().join("waybar")

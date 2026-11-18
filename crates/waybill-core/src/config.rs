@@ -9,6 +9,52 @@ pub struct Config {
     pub notes: NotesCfg,
     pub tags: TagsCfg,
     pub theme: ThemeCfg,
+    pub lint: LintCfg,
+    pub bar: BarCfg,
+}
+
+/// The house rules `waybill lint` checks open tasks against.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct LintCfg {
+    /// The longest a card title may be, in characters.
+    pub title: usize,
+    /// Tags allowed besides the hands and decision tags.
+    pub tags: Vec<String>,
+    /// Known projects. Empty means any project is fine. A dotted project
+    /// passes when its family is listed.
+    pub projects: Vec<String>,
+}
+
+impl Default for LintCfg {
+    fn default() -> Self {
+        LintCfg {
+            title: 50,
+            tags: vec!["research".into(), "bug".into(), "verify".into()],
+            projects: vec![],
+        }
+    }
+}
+
+/// The waybar module.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct BarCfg {
+    /// What the module shows. `{lamp}` is a dot, `{you}` the tasks waiting
+    /// on you, `{holding}` those that hold others up, `{ready}`, `{doing}`
+    /// and `{done}` the lane counts.
+    pub format: String,
+    /// The same, when nothing of yours holds anything up.
+    pub format_calm: String,
+}
+
+impl Default for BarCfg {
+    fn default() -> Self {
+        BarCfg {
+            format: "● {holding}".into(),
+            format_calm: "●".into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]

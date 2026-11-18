@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn command(cfg: &Config) -> anyhow::Result<Command> {
+pub(crate) fn command(cfg: &Config) -> anyhow::Result<Command> {
     let mut words = cfg.task.command.split_whitespace();
     let Some(program) = words.next() else {
         bail!("task.command is empty");
@@ -27,7 +27,7 @@ fn command(cfg: &Config) -> anyhow::Result<Command> {
     Ok(c)
 }
 
-fn run(mut c: Command) -> anyhow::Result<String> {
+pub(crate) fn run(mut c: Command) -> anyhow::Result<String> {
     let out = c
         .output()
         .with_context(|| format!("could not run {:?}", c.get_program()))?;
@@ -92,7 +92,9 @@ pub fn snapshot(cfg: &Config, notes: Option<&Path>, now: i64, zone: Zone) -> Sna
     match export(cfg) {
         Ok(tasks) => {
             let noted = notes.map(noted).unwrap_or_default();
-            crate::model::build(&tasks, &noted, &rules(cfg), now, zone)
+            let mut snap = crate::model::build(&tasks, &noted, &rules(cfg), now, zone);
+            crate::claim::apply(&mut snap, &crate::claim::list(), crate::claim::boot_time());
+            snap
         }
         Err(e) => Snapshot::failed(now, zone, format!("{e:#}")),
     }

@@ -112,6 +112,20 @@ fn drop_empty(out: &mut Vec<Block>) {
     }
 }
 
+/// The choices a decision offers: the bullets under an "Options" heading.
+pub fn options(md: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut inside = false;
+    for block in parse(md) {
+        match block {
+            Block::Heading(_, t) => inside = t.trim().eq_ignore_ascii_case("options"),
+            Block::Bullet { text, depth: 0, .. } if inside => out.push(text),
+            _ => {}
+        }
+    }
+    out
+}
+
 /// Splits a line at `code` and **bold** marks.
 pub fn spans(text: &str) -> Vec<Span> {
     let mut out: Vec<Span> = Vec::new();
@@ -187,6 +201,13 @@ mod tests {
         assert_eq!(blocks[7], Block::Code("W ends the run".into()));
         assert!(matches!(&blocks[8], Block::Bullet { text, .. } if text == "first"));
         assert_eq!(blocks.len(), 9);
+    }
+
+    #[test]
+    fn a_decision_lists_its_options() {
+        let md = "# Pick the rule\n\nContext.\n\n## Options\n\n- Keep 4 s\n- Lower it\n  to 2 s\n\n## Decided\n\n- Keep 4 s\n";
+        assert_eq!(options(md), ["Keep 4 s", "Lower it to 2 s"]);
+        assert!(options("# No choices here\n- a bullet\n").is_empty());
     }
 
     #[test]

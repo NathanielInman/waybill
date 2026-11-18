@@ -597,6 +597,18 @@ pub fn note(title: &str) -> String {
             ## Debug keys\n\n```\nL  refill the lantern\nB  ring the bell\n0  restart the level\n```\n"
             .into();
     }
+    if title == "Pick the launch discount" {
+        return "# Pick the launch discount\n\nLaunch is Friday. The list has 4,100 people on it and \
+            the last sale lifted orders for nine days.\n\n## Options\n\n- 10% for the first week\n\
+            - Free shipping, no discount\n- No offer at launch\n"
+            .into();
+    }
+    if title == "Choose the rounding rule for refunds" {
+        return "# Choose the rounding rule for refunds\n\nA refund split across three items can \
+            be a cent off the charge. Either rule is two lines in `ledger/round.rs`.\n\n\
+            ## Options\n\n- Round half to even\n- Give the odd cent to the largest line\n"
+            .into();
+    }
     format!(
         "# {title}\n\nWhat this is for, where the code lives and what done looks like. A note \
          carries whatever the card title cannot.\n\n- Start in `src/` and follow the marker.\n- \
