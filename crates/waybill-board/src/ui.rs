@@ -124,6 +124,14 @@ pub fn age(s: &Snapshot, c: &Card) -> String {
     clock::span(s.now - c.started.unwrap_or(c.entry))
 }
 
+/// "just now", "7 min ago", "3 d ago".
+pub fn ago(seconds: i64) -> String {
+    match clock::span(seconds).as_str() {
+        "now" => "just now".to_string(),
+        span => format!("{span} ago"),
+    }
+}
+
 /// A flat, full-width button around `child`.
 pub fn row_button(child: &impl IsA<gtk::Widget>, classes: &[&str]) -> gtk::Button {
     let b = gtk::Button::builder().child(child).build();

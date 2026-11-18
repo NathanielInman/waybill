@@ -1,57 +1,339 @@
-//! The card pane: one task in full. Its note laid out beside its visits,
-//! what it waits on and what it frees.
+//! The card pane: one task in full, and everything you can do to it. Its
+//! note laid out beside its visits, what it waits on and what it frees, and
+//! a row of buttons that each print their key.
 
-use crate::shell::Msg;
+use crate::actions::Action;
+use crate::shell::{Msg, World};
 use crate::ui::{self, chip, esc, hbox, label, vbox};
 use crate::views::Tx;
 use gtk::prelude::*;
-use waybill_core::clock;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+use waybill_core::act::NewTask;
+use waybill_core::claim::HoldState;
 use waybill_core::model::{Card, Lane, Snapshot, is_ruling};
 use waybill_core::note::{self, Block};
+
+type Run = Rc<dyn Fn()>;
 
 pub struct Detail {
     pub root: gtk::Box,
     body: gtk::Box,
     tx: Tx,
+    world: Rc<World>,
+    /// The keys that work on the card being shown.
+    keys: RefCell<Vec<(char, Run)>>,
+    /// Set while the user is typing in the pane, so a refresh of the list
+    /// does not rebuild it under their hands.
+    busy: Cell<bool>,
 }
 
 impl Detail {
-    pub fn new(tx: Tx) -> Detail {
+    pub fn new(tx: Tx, world: Rc<World>) -> Rc<Detail> {
         let root = vbox(0);
         root.add_css_class("detail");
-        root.set_size_request(460, -1);
+        root.set_size_request(480, -1);
         let body = vbox(14);
         root.append(&ui::scrolled(&body));
-        Detail { root, body, tx }
+        Rc::new(Detail {
+            root,
+            body,
+            tx,
+            world,
+            keys: RefCell::new(vec![]),
+            busy: Cell::new(false),
+        })
     }
 
-    pub fn show(&self, s: &Snapshot, c: &Card, note_text: Option<&str>) {
-        ui::clear(&self.body);
+    pub fn busy(&self) -> bool {
+        self.busy.get()
+    }
 
+    /// Lets the next refresh rebuild the pane again.
+    pub fn settle(&self) {
+        self.busy.set(false);
+    }
+
+    /// Runs the action bound to `key`, if the card has one.
+    pub fn key(&self, key: char) -> bool {
+        let run = self
+            .keys
+            .borrow()
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, r)| r.clone());
+        match run {
+            Some(run) => {
+                run();
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn send(&self, msg: Msg) {
+        let _ = self.tx.send_blocking(msg);
+    }
+
+    /// A button that prints its key, and the key itself.
+    fn button(&self, text: &str, key: Option<char>, class: &str, run: Run) -> gtk::Button {
+        let inner = hbox(7);
+        inner.append(&label(text, &[]));
+        if let Some(k) = key {
+            inner.append(&label(&k.to_string(), &["key"]));
+            self.keys.borrow_mut().push((k, run.clone()));
+        }
+        let b = gtk::Button::builder().child(&inner).build();
+        b.add_css_class("act");
+        if !class.is_empty() {
+            b.add_css_class(class);
+        }
+        b.connect_clicked(move |_| run());
+        b
+    }
+
+    fn doing(self: &Rc<Self>, action: Action) -> Run {
+        let me = Rc::downgrade(self);
+        Rc::new(move || {
+            if let Some(d) = me.upgrade() {
+                d.send(Msg::Do(action.clone()));
+            }
+        })
+    }
+
+    fn top(&self, left: &[gtk::Label]) {
         let top = hbox(6);
-        top.append(&ui::project(&c.project));
-        if let Some(p) = ui::priority(c.priority) {
-            top.append(&p);
-        }
-        if c.decision {
-            top.append(&chip("decision", "violet"));
-        }
-        for t in &c.tags {
-            top.append(&chip(t, ui::tag_class(t)));
+        for l in left {
+            top.append(l);
         }
         top.append(&ui::spring());
-        let close = gtk::Button::with_label("Close  Esc");
-        close.add_css_class("ghost");
+        let close = gtk::Button::builder().child(&{
+            let inner = hbox(7);
+            inner.append(&label("Close", &[]));
+            inner.append(&label("Esc", &["key"]));
+            inner
+        });
+        let close = close.build();
+        close.add_css_class("act");
         let tx = self.tx.clone();
         close.connect_clicked(move |_| {
             let _ = tx.send_blocking(Msg::Close);
         });
         top.append(&close);
         self.body.append(&top);
+    }
+
+    /// A line to type into, shown under the buttons. Enter submits, Esc
+    /// puts it away.
+    fn prompt(
+        self: &Rc<Self>,
+        slot: &gtk::Box,
+        hint: &str,
+        submit: impl Fn(String) -> Option<Action> + 'static,
+    ) {
+        ui::clear(slot);
+        let entry = gtk::Entry::new();
+        entry.set_placeholder_text(Some(hint));
+        entry.set_hexpand(true);
+        entry.add_css_class("prompt");
+        let line = hbox(8);
+        line.append(&entry);
+        line.append(&label("Enter", &["key"]));
+        slot.append(&line);
+        self.busy.set(true);
+        let (me, s) = (Rc::downgrade(self), slot.clone());
+        entry.connect_activate(move |e| {
+            let Some(d) = me.upgrade() else { return };
+            if let Some(action) = submit(e.text().to_string()) {
+                d.send(Msg::Do(action));
+            }
+            ui::clear(&s);
+            d.busy.set(false);
+        });
+        let keys = gtk::EventControllerKey::new();
+        let (me, s) = (Rc::downgrade(self), slot.clone());
+        keys.connect_key_pressed(move |_, key, _, _| {
+            if key == gtk::gdk::Key::Escape {
+                ui::clear(&s);
+                if let Some(d) = me.upgrade() {
+                    d.busy.set(false);
+                    d.root.grab_focus();
+                }
+                return gtk::glib::Propagation::Stop;
+            }
+            gtk::glib::Propagation::Proceed
+        });
+        entry.add_controller(keys);
+        entry.grab_focus();
+    }
+
+    pub fn show(self: &Rc<Self>, s: &Snapshot, c: &Card) {
+        ui::clear(&self.body);
+        self.keys.borrow_mut().clear();
+        self.busy.set(false);
+        let note_text = self.world.note(c);
+
+        let mut chips = vec![ui::project(&c.project)];
+        chips.extend(ui::priority(c.priority));
+        if c.decision {
+            chips.push(chip("decision", "violet"));
+        }
+        chips.extend(c.tags.iter().map(|t| chip(t, ui::tag_class(t))));
+        self.top(&chips);
 
         let title = ui::wrapped(&c.title, &["detail-title"], 6);
         title.set_selectable(true);
         self.body.append(&title);
+
+        let open = c.ended.is_none();
+        let uuid = c.uuid.clone();
+        let slot = vbox(0);
+        if open {
+            let row = hbox(6);
+            let started = c.lane == Lane::Doing;
+            row.append(&if started {
+                self.button(
+                    "Stop",
+                    Some('s'),
+                    "",
+                    self.doing(Action::Stop(uuid.clone())),
+                )
+            } else {
+                self.button(
+                    "Start",
+                    Some('s'),
+                    "go",
+                    self.doing(Action::Start(uuid.clone())),
+                )
+            });
+            let (me, sl, u) = (Rc::downgrade(self), slot.clone(), uuid.clone());
+            row.append(&self.button(
+                "Done",
+                Some('d'),
+                "go",
+                Rc::new(move || {
+                    if let Some(d) = me.upgrade() {
+                        let u = u.clone();
+                        d.prompt(&sl, "A closing line, or just Enter", move |t| {
+                            Some(Action::Done(u.clone(), t))
+                        });
+                    }
+                }),
+            ));
+            let (me, sl, u) = (Rc::downgrade(self), slot.clone(), uuid.clone());
+            row.append(&self.button(
+                "Visit",
+                Some('v'),
+                "",
+                Rc::new(move || {
+                    if let Some(d) = me.upgrade() {
+                        let u = u.clone();
+                        d.prompt(&sl, "What happened, and what is next", move |t| {
+                            (!t.trim().is_empty()).then(|| Action::Visit(u.clone(), t))
+                        });
+                    }
+                }),
+            ));
+            let (me, sl, u) = (Rc::downgrade(self), slot.clone(), uuid.clone());
+            let parked = c.lane == Lane::Parked;
+            row.append(&if parked {
+                self.button(
+                    "Unpark",
+                    Some('w'),
+                    "",
+                    self.doing(Action::Park(uuid.clone(), String::new())),
+                )
+            } else {
+                self.button(
+                    "Park",
+                    Some('w'),
+                    "",
+                    Rc::new(move || {
+                        if let Some(d) = me.upgrade() {
+                            let u = u.clone();
+                            d.prompt(&sl, "Until when: friday, 2026-12-01, someday", move |t| {
+                                let date = t
+                                    .split_whitespace()
+                                    .last()
+                                    .unwrap_or("someday")
+                                    .to_lowercase();
+                                Some(Action::Park(u.clone(), date))
+                            });
+                        }
+                    }),
+                )
+            });
+            self.body.append(&row);
+
+            let row = hbox(6);
+            for (p, key) in [('H', 'h'), ('M', 'm'), ('L', 'l')] {
+                let b = self.button(
+                    &p.to_string(),
+                    Some(key),
+                    "",
+                    self.doing(Action::Priority(uuid.clone(), p)),
+                );
+                if c.priority == p {
+                    b.add_css_class("on");
+                }
+                row.append(&b);
+            }
+            row.append(&if c.yours {
+                self.button(
+                    "Hand to agents",
+                    Some('t'),
+                    "",
+                    self.doing(Action::Hands(uuid.clone(), false)),
+                )
+            } else {
+                self.button(
+                    "Take it",
+                    Some('t'),
+                    "",
+                    self.doing(Action::Hands(uuid.clone(), true)),
+                )
+            });
+            self.body.append(&row);
+
+            if c.decision {
+                self.body.append(&label("Decide", &["section"]));
+                let options = note_text.as_deref().map(note::options).unwrap_or_default();
+                let list = vbox(5);
+                for (i, option) in options.iter().enumerate() {
+                    let key = ['a', 'b', 'c'].get(i).copied();
+                    let b = self.button(
+                        option,
+                        key,
+                        "choice",
+                        self.doing(Action::Rule(uuid.clone(), option.clone())),
+                    );
+                    b.set_halign(gtk::Align::Start);
+                    list.append(&b);
+                }
+                let (me, sl, u) = (Rc::downgrade(self), slot.clone(), uuid.clone());
+                let other = self.button(
+                    if options.is_empty() {
+                        "Write the ruling"
+                    } else {
+                        "Something else"
+                    },
+                    Some('o'),
+                    "",
+                    Rc::new(move || {
+                        if let Some(d) = me.upgrade() {
+                            let u = u.clone();
+                            d.prompt(&sl, "Your ruling, in your words", move |t| {
+                                (!t.trim().is_empty()).then(|| Action::Rule(u.clone(), t))
+                            });
+                        }
+                    }),
+                );
+                other.set_halign(gtk::Align::Start);
+                list.append(&other);
+                self.body.append(&list);
+            }
+            self.body.append(&slot);
+        }
 
         let (state, class) = match c.lane {
             Lane::Ready => ("ready for an agent", "accent"),
@@ -78,29 +360,37 @@ impl Detail {
         fact("state", state_line.upcast());
         if let Some(start) = c.started.filter(|_| c.ended.is_none()) {
             fact(
-                "held for",
+                "started",
                 label(
-                    &format!(
-                        "{} (since {})",
-                        clock::span(s.now - start),
-                        ui::when(s, start)
-                    ),
+                    &format!("{} (at {})", ui::ago(s.now - start), ui::when(s, start)),
                     &["num"],
                 )
                 .upcast(),
             );
         }
+        if let Some(hold) = c.hold.as_ref().filter(|_| c.ended.is_none()) {
+            let (text, class) = match hold.state {
+                HoldState::Held => (hold.who.clone(), "ok"),
+                HoldState::Unclaimed => (
+                    "nobody on record: started without a claim".to_string(),
+                    "dim",
+                ),
+                HoldState::Stale if hold.who.is_empty() => (
+                    "nobody: it was started before the last boot".to_string(),
+                    "bad",
+                ),
+                HoldState::Stale => (format!("nobody: {} is gone", hold.who), "bad"),
+            };
+            fact("held by", ui::wrapped(&text, &[class], 2).upcast());
+        }
         if let Some(end) = c.ended {
             fact("finished", label(&ui::when(s, end), &["num"]).upcast());
         }
-        fact(
-            "added",
-            label(&format!("{} ago", clock::span(s.now - c.entry)), &["num"]).upcast(),
-        );
-        let uuid = label(c.short(), &["num", "mono"]);
-        uuid.set_selectable(true);
-        uuid.set_tooltip_text(Some(&c.uuid));
-        fact("uuid", uuid.upcast());
+        fact("added", label(&ui::ago(s.now - c.entry), &["num"]).upcast());
+        let short = label(c.short(), &["num", "mono"]);
+        short.set_selectable(true);
+        short.set_tooltip_text(Some(&c.uuid));
+        fact("uuid", short.upcast());
         if let Some(r) = &c.reference {
             fact("marker", chip(r, "sha").upcast());
         }
@@ -109,15 +399,44 @@ impl Detail {
         self.related(s, "Frees when it closes", &c.frees);
         self.related(s, "Waits on", &c.waits_on);
 
-        self.body.append(&label("Note", &["section"]));
-        match note_text {
-            Some(text) => self.body.append(&render_note(text)),
-            None => self.body.append(&ui::wrapped(
+        let head = hbox(8);
+        head.append(&label("Note", &["section"]));
+        head.append(&ui::spring());
+        let note_box = vbox(0);
+        if open {
+            let (me, nb, u, text) = (
+                Rc::downgrade(self),
+                note_box.clone(),
+                uuid.clone(),
+                note_text.clone(),
+            );
+            let title = c.title.clone();
+            head.append(&self.button(
+                if note_text.is_some() {
+                    "Edit"
+                } else {
+                    "Write one"
+                },
+                Some('e'),
+                "",
+                Rc::new(move || {
+                    if let Some(d) = me.upgrade() {
+                        let start = text.clone().unwrap_or_else(|| format!("# {title}\n\n"));
+                        d.edit_note(&nb, &u, &start);
+                    }
+                }),
+            ));
+        }
+        self.body.append(&head);
+        match &note_text {
+            Some(text) => note_box.append(&render_note(text)),
+            None => note_box.append(&ui::wrapped(
                 "No note. The card title carries everything.",
                 &["empty"],
                 2,
             )),
         }
+        self.body.append(&note_box);
 
         self.body.append(&label(
             &match c.visits.len() {
@@ -155,6 +474,173 @@ impl Detail {
             rail.append(&item);
         }
         self.body.append(&rail);
+    }
+
+    /// Swaps the note for an editor.
+    fn edit_note(self: &Rc<Self>, slot: &gtk::Box, uuid: &str, text: &str) {
+        ui::clear(slot);
+        self.busy.set(true);
+        let view = gtk::TextView::new();
+        view.set_wrap_mode(gtk::WrapMode::WordChar);
+        view.set_monospace(true);
+        view.add_css_class("editor");
+        view.buffer().set_text(text);
+        let scroll = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .min_content_height(260)
+            .child(&view)
+            .build();
+        slot.append(&scroll);
+        let row = hbox(6);
+        row.set_margin_top(8);
+        let (me, u, v) = (Rc::downgrade(self), uuid.to_string(), view.clone());
+        let save = gtk::Button::with_label("Save");
+        save.add_css_class("act");
+        save.add_css_class("go");
+        save.connect_clicked(move |_| {
+            if let Some(d) = me.upgrade() {
+                let b = v.buffer();
+                let text = b.text(&b.start_iter(), &b.end_iter(), false).to_string();
+                d.busy.set(false);
+                d.send(Msg::Do(Action::SaveNote(u.clone(), text)));
+            }
+        });
+        let me = Rc::downgrade(self);
+        let cancel = gtk::Button::with_label("Cancel");
+        cancel.add_css_class("act");
+        cancel.connect_clicked(move |_| {
+            if let Some(d) = me.upgrade() {
+                d.busy.set(false);
+                d.send(Msg::Reopen);
+            }
+        });
+        row.append(&save);
+        row.append(&cancel);
+        slot.append(&row);
+        view.grab_focus();
+    }
+
+    /// The pane as a form for a new task.
+    pub fn show_new(self: &Rc<Self>, s: &Snapshot, title: &str, limit: usize) {
+        ui::clear(&self.body);
+        self.keys.borrow_mut().clear();
+        self.busy.set(true);
+        self.top(&[label("New task", &["section"])]);
+
+        let entry = gtk::Entry::new();
+        entry.set_text(title);
+        entry.set_placeholder_text(Some("Imperative and short: Wire the victory screen"));
+        entry.add_css_class("prompt");
+        let count = label("", &["dim", "small", "num"]);
+        let update = {
+            let (entry, count) = (entry.clone(), count.clone());
+            move || {
+                let n = entry.text().chars().count();
+                count.set_label(&format!("{n} of {limit} characters"));
+                if n > limit {
+                    count.add_css_class("bad");
+                } else {
+                    count.remove_css_class("bad");
+                }
+            }
+        };
+        update();
+        entry.connect_changed(move |_| update());
+        self.body.append(&label("Title", &["dim"]));
+        self.body.append(&entry);
+        self.body.append(&count);
+
+        let mut names: Vec<String> = s.pulse.projects.iter().map(|p| p.name.clone()).collect();
+        names.sort();
+        let project = gtk::Entry::new();
+        project.add_css_class("prompt");
+        project.set_placeholder_text(Some("project"));
+        if let Some(first) = s.pulse.projects.first() {
+            project.set_text(&first.name);
+        }
+        let hint = ui::wrapped(&names.join("  "), &["dim", "small"], 3);
+        self.body.append(&label("Project", &["dim"]));
+        self.body.append(&project);
+        self.body.append(&hint);
+
+        let row = hbox(6);
+        let priority = Rc::new(Cell::new('M'));
+        let buttons: Vec<gtk::ToggleButton> = ['H', 'M', 'L']
+            .iter()
+            .map(|p| {
+                let b = gtk::ToggleButton::with_label(&p.to_string());
+                b.add_css_class("act");
+                b.set_active(*p == 'M');
+                row.append(&b);
+                b
+            })
+            .collect();
+        for (i, b) in buttons.iter().enumerate() {
+            if i > 0 {
+                b.set_group(Some(&buttons[0]));
+            }
+            let (priority, p) = (priority.clone(), ['H', 'M', 'L'][i]);
+            b.connect_toggled(move |b| {
+                if b.is_active() {
+                    priority.set(p);
+                }
+            });
+        }
+        let mine = gtk::CheckButton::with_label("It needs my hands");
+        mine.set_margin_start(10);
+        row.append(&mine);
+        self.body.append(&label("Priority", &["dim"]));
+        self.body.append(&row);
+
+        let note = gtk::TextView::new();
+        note.set_wrap_mode(gtk::WrapMode::WordChar);
+        note.set_monospace(true);
+        note.add_css_class("editor");
+        let scroll = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .min_content_height(170)
+            .child(&note)
+            .build();
+        self.body.append(&label("Note (optional)", &["dim"]));
+        self.body.append(&scroll);
+
+        let add = gtk::Button::with_label("Add the task");
+        add.add_css_class("act");
+        add.add_css_class("go");
+        add.set_halign(gtk::Align::Start);
+        let submit: Rc<dyn Fn()> = {
+            let (me, entry, project, mine, note) = (
+                Rc::downgrade(self),
+                entry.clone(),
+                project.clone(),
+                mine.clone(),
+                note.clone(),
+            );
+            Rc::new(move || {
+                let Some(d) = me.upgrade() else { return };
+                if entry.text().trim().is_empty() {
+                    return;
+                }
+                let b = note.buffer();
+                d.busy.set(false);
+                d.send(Msg::Do(Action::Add {
+                    new: NewTask {
+                        title: entry.text().to_string(),
+                        project: Some(project.text().trim().to_string()).filter(|p| !p.is_empty()),
+                        priority: Some(priority.get()),
+                        ..Default::default()
+                    },
+                    note: b.text(&b.start_iter(), &b.end_iter(), false).to_string(),
+                    mine: mine.is_active(),
+                }));
+                d.send(Msg::Close);
+            })
+        };
+        let run = submit.clone();
+        add.connect_clicked(move |_| run());
+        entry.connect_activate(move |_| submit());
+        self.body.append(&add);
+        entry.grab_focus();
     }
 
     fn related(&self, s: &Snapshot, title: &str, uuids: &[String]) {

@@ -11,13 +11,23 @@ fn main() {
 }
 
 #[cfg(target_os = "linux")]
+mod actions;
+#[cfg(target_os = "linux")]
+mod anim;
+#[cfg(target_os = "linux")]
 mod app;
 #[cfg(target_os = "linux")]
 mod charts;
 #[cfg(target_os = "linux")]
 mod detail;
 #[cfg(target_os = "linux")]
+mod drawer;
+#[cfg(target_os = "linux")]
+mod palette;
+#[cfg(target_os = "linux")]
 mod shell;
+#[cfg(target_os = "linux")]
+mod stage;
 #[cfg(target_os = "linux")]
 mod theme;
 #[cfg(target_os = "linux")]

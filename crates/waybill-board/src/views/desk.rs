@@ -1,10 +1,13 @@
 //! Desk: the user's own queue, ordered by how much work each task frees.
 
 use super::{Tx, open};
+use crate::actions::Action;
 use crate::charts::{self, Canvas, Ring};
+use crate::shell::{Msg, World};
 use crate::theme::{self, Rgba};
 use crate::ui::{self, chip, hbox, label, vbox};
 use gtk::prelude::*;
+use std::rc::Rc;
 use waybill_core::model::{Card, Lane, Snapshot};
 
 pub struct DeskView {
@@ -15,10 +18,11 @@ pub struct DeskView {
     legend: gtk::Box,
     facts: gtk::Box,
     tx: Tx,
+    world: Rc<World>,
 }
 
 impl DeskView {
-    pub fn new(tx: Tx) -> DeskView {
+    pub fn new(tx: Tx, world: Rc<World>) -> DeskView {
         let root = hbox(16);
         root.add_css_class("desk");
 
@@ -61,6 +65,7 @@ impl DeskView {
             legend,
             facts,
             tx,
+            world,
         }
     }
 
@@ -107,6 +112,29 @@ impl DeskView {
             self.list.append(&label("Decisions", &["section"]));
             for c in decisions {
                 self.list.append(&row(s, c, most, &self.tx));
+                // The options, one click each, straight from the note.
+                let options = self.world.options(c);
+                if !options.is_empty() {
+                    let strip = ui::hbox(6);
+                    strip.add_css_class("options");
+                    for option in options.iter().take(4) {
+                        let b = gtk::Button::with_label(option);
+                        b.add_css_class("act");
+                        b.add_css_class("choice");
+                        if let Some(l) = b.child().and_downcast::<gtk::Label>() {
+                            l.set_ellipsize(gtk::pango::EllipsizeMode::End);
+                            l.set_max_width_chars(34);
+                        }
+                        b.set_tooltip_text(Some(option));
+                        let (tx, uuid, choice) = (self.tx.clone(), c.uuid.clone(), option.clone());
+                        b.connect_clicked(move |_| {
+                            let _ = tx
+                                .send_blocking(Msg::Do(Action::Rule(uuid.clone(), choice.clone())));
+                        });
+                        strip.append(&b);
+                    }
+                    self.list.append(&strip);
+                }
             }
         }
         let rest: Vec<&&Card> = yours
@@ -238,7 +266,10 @@ fn row(s: &Snapshot, c: &Card, most: usize, tx: &Tx) -> gtk::Button {
         meta.append(&chip(&format!("waits on {}", c.waits_on.len()), "plain"));
     }
     meta.append(&label(
-        &format!("open {}", ui::age(s, c)),
+        &match ui::age(s, c).as_str() {
+            "now" => "new".to_string(),
+            age => format!("open {age}"),
+        },
         &["dim", "small"],
     ));
     mid.append(&meta);

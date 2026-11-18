@@ -1,9 +1,11 @@
 //! The window: a header with the lamp and tabs, the five views, the card
-//! pane sliding in from the right, and a footer that says what the current
-//! view is for.
+//! pane sliding in from the right, and a footer with what the view is for,
+//! what just happened and the `/` line.
 
+use crate::actions::{self, Action};
 use crate::charts::{self, Canvas};
 use crate::detail::Detail;
+use crate::palette::{self, Command};
 use crate::theme::{self, Rgba};
 use crate::ui::{self, hbox, label, vbox};
 use crate::views::board::BoardView;
@@ -15,25 +17,64 @@ use crate::views::{Tab, Tx};
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 use std::cell::{Cell, RefCell};
-use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
-use waybill_core::model::Snapshot;
+use waybill_core::agent::Desk;
+use waybill_core::clock;
+use waybill_core::model::{Card, Snapshot};
 
 pub enum Msg {
     Snapshot(Box<Snapshot>),
     /// Open the card with this uuid.
     Open(String),
+    /// Show the open card again, dropping whatever was being typed.
+    Reopen,
     Close,
     /// The bar's stylesheet or the config changed.
     Restyle,
+    Do(Action),
+    /// What an action came back with.
+    Did(Result<String, String>),
+    /// Open the new-task form with this title.
+    New(String),
+    /// Show or hide the drawer, at this anchor (the drawer only).
+    Toggle(Option<bar_anchor::Anchor>),
 }
 
-/// Where a card's note comes from.
-pub enum Notes {
-    Demo,
-    Dir(Option<PathBuf>),
+/// Where the board's tasks live. `desk` is `None` for the demo list and for
+/// a saved snapshot, which nothing can be written to.
+pub struct World {
+    pub desk: Option<Arc<Desk>>,
+    pub demo: bool,
 }
+
+impl World {
+    pub fn note(&self, card: &Card) -> Option<String> {
+        if self.demo {
+            return Some(waybill_core::demo::note(&card.title));
+        }
+        let dir = self.desk.as_ref()?.notes.as_ref()?;
+        waybill_core::act::read_note(dir, &card.uuid)
+    }
+
+    /// The choices a decision card offers.
+    pub fn options(&self, card: &Card) -> Vec<String> {
+        if !card.decision {
+            return vec![];
+        }
+        self.note(card)
+            .as_deref()
+            .map(waybill_core::note::options)
+            .unwrap_or_default()
+    }
+
+    pub fn title_limit(&self) -> usize {
+        self.desk.as_ref().map(|d| d.cfg.lint.title).unwrap_or(50)
+    }
+}
+
+type Run = Rc<dyn Fn()>;
 
 pub struct Shell {
     pub window: gtk::ApplicationWindow,
@@ -45,7 +86,7 @@ pub struct Shell {
     lines: LinesView,
     log: LogView,
     pulse: PulseView,
-    detail: Detail,
+    detail: Rc<Detail>,
     reveal: gtk::Revealer,
     lamp: gtk::Label,
     counts: gtk::Label,
@@ -53,15 +94,38 @@ pub struct Shell {
     spark: charts::Spark,
     notice: gtk::Label,
     question: gtk::Label,
+    toast: gtk::Label,
+    toast_timer: Rc<RefCell<Option<glib::SourceId>>>,
+    line: gtk::Entry,
+    found: gtk::Popover,
+    found_list: gtk::Box,
+    found_runs: RefCell<Vec<Run>>,
     snap: RefCell<Rc<Snapshot>>,
     tab: Cell<Tab>,
     stale: RefCell<[bool; 5]>,
     opened: RefCell<Option<String>>,
-    notes: Notes,
+    world: Rc<World>,
+    tx: Tx,
+    /// Asks the loader to reread the list now.
+    wake: mpsc::Sender<()>,
+}
+
+fn keyed(text: &str, key: &str) -> gtk::Box {
+    let inner = hbox(7);
+    inner.append(&label(text, &[]));
+    inner.append(&label(key, &["key"]));
+    inner
 }
 
 impl Shell {
-    pub fn new(app: &gtk::Application, tx: Tx, notes: Notes, size: (i32, i32)) -> Rc<Shell> {
+    pub fn new(
+        app: &gtk::Application,
+        tx: Tx,
+        world: World,
+        wake: mpsc::Sender<()>,
+        size: (i32, i32),
+    ) -> Rc<Shell> {
+        let world = Rc::new(world);
         let window = gtk::ApplicationWindow::builder()
             .application(app)
             .title("Waybill")
@@ -88,10 +152,9 @@ impl Shell {
         tab_box.add_css_class("tabs");
         let mut tabs = Vec::new();
         for (i, tab) in Tab::ALL.into_iter().enumerate() {
-            let inner = hbox(8);
-            inner.append(&label(tab.name(), &[]));
-            inner.append(&label(&(i + 1).to_string(), &["key"]));
-            let b = gtk::Button::builder().child(&inner).build();
+            let b = gtk::Button::builder()
+                .child(&keyed(tab.name(), &(i + 1).to_string()))
+                .build();
             b.set_tooltip_text(Some(tab.question()));
             tab_box.append(&b);
             tabs.push(b);
@@ -112,6 +175,13 @@ impl Shell {
         right.append(&spark.area);
         let today = label("", &["dim", "num"]);
         right.append(&today);
+        let new = gtk::Button::builder().child(&keyed("New", "n")).build();
+        new.add_css_class("act");
+        let t = tx.clone();
+        new.connect_clicked(move |_| {
+            let _ = t.send_blocking(Msg::New(String::new()));
+        });
+        right.append(&new);
         header.set_end_widget(Some(&right));
         page.append(&header);
 
@@ -125,7 +195,7 @@ impl Shell {
         stack.set_hexpand(true);
         stack.set_vexpand(true);
         let board = BoardView::new(tx.clone());
-        let desk = DeskView::new(tx.clone());
+        let desk = DeskView::new(tx.clone(), world.clone());
         let lines = LinesView::new(tx.clone());
         let log = LogView::new(tx.clone());
         let pulse = PulseView::new();
@@ -135,9 +205,9 @@ impl Shell {
         stack.add_named(&log.root, Some(Tab::Log.id()));
         stack.add_named(&pulse.root, Some(Tab::Pulse.id()));
 
-        let detail = Detail::new(tx.clone());
         // The card pane slides over the right edge of the view, so opening
         // a card never reflows the board under it.
+        let detail = Detail::new(tx.clone(), world.clone());
         let reveal = gtk::Revealer::new();
         reveal.set_transition_type(gtk::RevealerTransitionType::SlideLeft);
         // A screenshot is one frame: the pane must already be there.
@@ -150,16 +220,21 @@ impl Shell {
         middle.add_overlay(&reveal);
         page.append(&middle);
 
-        let footer = hbox(16);
+        let footer = hbox(14);
         footer.add_css_class("footer");
         let question = label("", &["question"]);
         footer.append(&question);
-        footer.append(&ui::spring());
-        for (key, what) in [
-            ("1 to 5", "views"),
-            ("click", "open a card"),
-            ("Esc", "close it"),
-        ] {
+        let toast = label("", &["toast"]);
+        toast.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        toast.set_hexpand(true);
+        toast.set_xalign(1.0);
+        footer.append(&toast);
+        let line = gtk::Entry::new();
+        line.add_css_class("prompt");
+        line.set_width_chars(34);
+        line.set_placeholder_text(Some("/  find a card, or say what to do"));
+        footer.append(&line);
+        for (key, what) in [("1 to 5", "views"), ("Esc", "close")] {
             let hint = hbox(6);
             hint.append(&label(key, &["key"]));
             hint.append(&label(what, &["dim"]));
@@ -167,6 +242,16 @@ impl Shell {
         }
         page.append(&footer);
         window.set_child(Some(&page));
+
+        let found = gtk::Popover::new();
+        found.set_parent(&line);
+        found.set_autohide(false);
+        found.set_has_arrow(false);
+        found.set_position(gtk::PositionType::Top);
+        found.set_can_focus(false);
+        found.add_css_class("found");
+        let found_list = vbox(2);
+        found.set_child(Some(&found_list));
 
         let shell = Rc::new(Shell {
             window,
@@ -186,11 +271,19 @@ impl Shell {
             spark,
             notice,
             question,
+            toast,
+            toast_timer: Rc::new(RefCell::new(None)),
+            line,
+            found,
+            found_list,
+            found_runs: RefCell::new(vec![]),
             snap: RefCell::new(Rc::new(Snapshot::default())),
             tab: Cell::new(Tab::Board),
             stale: RefCell::new([true; 5]),
             opened: RefCell::new(None),
-            notes,
+            world,
+            tx,
+            wake,
         });
 
         for (tab, button) in Tab::ALL.into_iter().zip(&shell.tabs) {
@@ -201,22 +294,52 @@ impl Shell {
                 }
             });
         }
+        shell.connect_line();
+        shell.connect_keys();
+        shell.set_tab(Tab::Board);
+        shell
+    }
+
+    fn typing(&self) -> bool {
+        gtk::prelude::RootExt::focus(&self.window)
+            .is_some_and(|w| w.is::<gtk::Text>() || w.is::<gtk::TextView>())
+    }
+
+    fn connect_keys(self: &Rc<Self>) {
         let keys = gtk::EventControllerKey::new();
         keys.set_propagation_phase(gtk::PropagationPhase::Capture);
-        let weak = Rc::downgrade(&shell);
+        let weak = Rc::downgrade(self);
         keys.connect_key_pressed(move |_, key, _, state| {
             let Some(s) = weak.upgrade() else {
                 return glib::Propagation::Proceed;
             };
-            if state.intersects(gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::ALT_MASK) {
+            if state.intersects(gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::ALT_MASK)
+                || s.typing()
+            {
                 return glib::Propagation::Proceed;
             }
             if key == gdk::Key::Escape && s.opened.borrow().is_some() {
                 s.close();
                 return glib::Propagation::Stop;
             }
-            let digit = key.to_unicode().and_then(|c| c.to_digit(10));
-            match digit.and_then(|d| Tab::ALL.get((d as usize).wrapping_sub(1))) {
+            let Some(ch) = key.to_unicode() else {
+                return glib::Propagation::Proceed;
+            };
+            if ch == '/' {
+                s.line.grab_focus();
+                return glib::Propagation::Stop;
+            }
+            if s.opened.borrow().is_some() && s.detail.key(ch) {
+                return glib::Propagation::Stop;
+            }
+            if ch == 'n' {
+                s.new_task("");
+                return glib::Propagation::Stop;
+            }
+            match ch
+                .to_digit(10)
+                .and_then(|d| Tab::ALL.get((d as usize).wrapping_sub(1)))
+            {
                 Some(tab) => {
                     s.set_tab(*tab);
                     glib::Propagation::Stop
@@ -224,9 +347,115 @@ impl Shell {
                 None => glib::Propagation::Proceed,
             }
         });
-        shell.window.add_controller(keys);
-        shell.set_tab(Tab::Board);
-        shell
+        self.window.add_controller(keys);
+    }
+
+    /// The `/` line: results as you type, Enter takes the first.
+    fn connect_line(self: &Rc<Self>) {
+        let weak = Rc::downgrade(self);
+        self.line.connect_changed(move |_| {
+            if let Some(s) = weak.upgrade() {
+                s.find();
+            }
+        });
+        let weak = Rc::downgrade(self);
+        self.line.connect_activate(move |_| {
+            let Some(s) = weak.upgrade() else { return };
+            let first = s.found_runs.borrow().first().cloned();
+            if let Some(run) = first {
+                run();
+            }
+            s.leave_line();
+        });
+        let keys = gtk::EventControllerKey::new();
+        let weak = Rc::downgrade(self);
+        keys.connect_key_pressed(move |_, key, _, _| {
+            if key == gdk::Key::Escape
+                && let Some(s) = weak.upgrade()
+            {
+                s.leave_line();
+                return glib::Propagation::Stop;
+            }
+            glib::Propagation::Proceed
+        });
+        self.line.add_controller(keys);
+    }
+
+    fn leave_line(&self) {
+        self.line.set_text("");
+        self.found.popdown();
+        self.page.grab_focus();
+    }
+
+    fn find(self: &Rc<Self>) {
+        let text = self.line.text().to_string();
+        let text = text.trim().trim_start_matches('/').trim();
+        ui::clear(&self.found_list);
+        let mut runs: Vec<Run> = Vec::new();
+        let mut add = |shown: gtk::Box, run: Run| {
+            let b = ui::row_button(&shown, &["row", "slim"]);
+            b.set_can_focus(false);
+            let r = run.clone();
+            b.connect_clicked(move |_| r());
+            self.found_list.append(&b);
+            runs.push(run);
+        };
+        if !text.is_empty() {
+            let opened = self.opened.borrow().clone();
+            if let Some((command, say)) = palette::parse(text, opened.as_deref()) {
+                let row = hbox(8);
+                row.append(&label("→", &["accent"]));
+                row.append(&label(&say, &["bright"]));
+                let weak = Rc::downgrade(self);
+                add(
+                    row,
+                    Rc::new(move || {
+                        let Some(s) = weak.upgrade() else { return };
+                        match command.clone() {
+                            Command::Do(a) => s.act(a),
+                            Command::View(t) => s.set_tab(t),
+                            Command::New(title) => s.new_task(&title),
+                        }
+                        s.leave_line();
+                    }),
+                );
+            }
+            let snap = self.snap.borrow().clone();
+            let mut hits: Vec<(usize, &Card)> = snap
+                .cards
+                .iter()
+                .filter(|c| c.ended.is_none())
+                .filter_map(|c| {
+                    palette::score(text, &c.title, &c.project, &c.tags, &c.uuid).map(|s| (s, c))
+                })
+                .collect();
+            hits.sort_by_key(|(s, c)| (*s, c.title.len()));
+            for (_, c) in hits.into_iter().take(7) {
+                let row = hbox(8);
+                row.append(&ui::project(&c.project));
+                let t = label(&c.title, &[]);
+                t.set_ellipsize(gtk::pango::EllipsizeMode::End);
+                t.set_max_width_chars(52);
+                row.append(&t);
+                let (weak, uuid) = (Rc::downgrade(self), c.uuid.clone());
+                add(
+                    row,
+                    Rc::new(move || {
+                        if let Some(s) = weak.upgrade() {
+                            s.open(&uuid);
+                            s.leave_line();
+                        }
+                    }),
+                );
+            }
+        }
+        let any = !runs.is_empty();
+        *self.found_runs.borrow_mut() = runs;
+        if any {
+            self.found.popup();
+        } else {
+            self.found.popdown();
+        }
     }
 
     pub fn handle(self: &Rc<Self>, msg: Msg) {
@@ -236,21 +465,75 @@ impl Shell {
                 self.refresh();
             }
             Msg::Open(uuid) => self.open(&uuid),
+            Msg::Reopen => {
+                let opened = self.opened.borrow().clone();
+                match opened {
+                    Some(uuid) if !uuid.is_empty() => self.open(&uuid),
+                    _ => self.close(),
+                }
+            }
             Msg::Close => self.close(),
             Msg::Restyle => {
                 crate::app::apply_styles();
                 self.refresh();
             }
+            Msg::Do(action) => self.act(action),
+            Msg::Did(result) => {
+                match result {
+                    Ok(said) => self.say(&said, false),
+                    Err(e) => self.say(&e, true),
+                }
+                self.detail.settle();
+                let _ = self.wake.send(());
+            }
+            Msg::New(title) => self.new_task(&title),
+            Msg::Toggle(_) => {}
         }
     }
 
+    /// Runs an action on a worker thread; the answer comes back as `Did`.
+    pub fn act(&self, action: Action) {
+        let Some(desk) = self.world.desk.clone() else {
+            self.say("This list is read-only here; nothing was written.", true);
+            return;
+        };
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let result =
+                actions::perform(&desk, action, clock::now()).map_err(|e| format!("{e:#}"));
+            let _ = tx.send_blocking(Msg::Did(result));
+        });
+    }
+
+    /// One line in the footer for a few seconds.
+    fn say(&self, text: &str, bad: bool) {
+        self.toast.set_label(text);
+        if bad {
+            self.toast.add_css_class("bad");
+        } else {
+            self.toast.remove_css_class("bad");
+        }
+        if let Some(id) = self.toast_timer.borrow_mut().take() {
+            id.remove();
+        }
+        let (toast, slot) = (self.toast.clone(), self.toast_timer.clone());
+        let id =
+            glib::timeout_add_local_once(Duration::from_secs(if bad { 9 } else { 5 }), move || {
+                // A timer that has fired must not be removed again.
+                slot.borrow_mut().take();
+                toast.set_label("");
+            });
+        *self.toast_timer.borrow_mut() = Some(id);
+    }
+
     /// Redraws everything that shows the snapshot.
-    fn refresh(&self) {
+    fn refresh(self: &Rc<Self>) {
         *self.stale.borrow_mut() = [true; 5];
         self.render_header();
         self.render(self.tab.get());
         let opened = self.opened.borrow().clone();
-        if let Some(uuid) = opened {
+        // Not while the user is typing in the pane.
+        if let Some(uuid) = opened.filter(|u| !u.is_empty() && !self.detail.busy()) {
             self.open(&uuid);
         }
     }
@@ -266,21 +549,13 @@ impl Shell {
         for c in ["ok", "warn", "bad"] {
             self.lamp.remove_css_class(c);
         }
-        // Amber only when the user is what the work waits on.
-        let (class, why) = if s.error.is_some() {
-            ("bad", "The task list could not be read".to_string())
-        } else if p.holding > 0 {
-            (
-                "warn",
-                format!("{} of your tasks hold up {} others", p.holding, p.held_up),
-            )
-        } else if p.decisions_open > 0 {
-            ("warn", format!("{} decisions are open", p.decisions_open))
-        } else {
-            ("ok", "Nothing of yours holds anything up".to_string())
-        };
-        self.lamp.add_css_class(class);
-        self.lamp.set_tooltip_text(Some(&why));
+        let lamp = waybill_core::lamp::lamp(&s);
+        self.lamp.add_css_class(match lamp.state {
+            waybill_core::lamp::State::Calm => "ok",
+            waybill_core::lamp::State::NeedsYou => "warn",
+            waybill_core::lamp::State::Error => "bad",
+        });
+        self.lamp.set_tooltip_text(Some(&lamp.why));
         self.today.set_label(&format!(
             "{} finished today · {}",
             lanes.done,
@@ -346,35 +621,62 @@ impl Shell {
         }
     }
 
-    fn open(&self, uuid: &str) {
+    fn open(self: &Rc<Self>, uuid: &str) {
         let s = self.snap.borrow().clone();
         let Some(card) = s.card(uuid) else {
             // The card left the snapshot: finished long ago, or deleted.
             self.close();
             return;
         };
-        let note = match &self.notes {
-            Notes::Demo => Some(waybill_core::demo::note(&card.title)),
-            Notes::Dir(dir) => dir
-                .as_ref()
-                .and_then(|d| std::fs::read_to_string(d.join(format!("{}.md", card.uuid))).ok()),
-        };
-        self.detail.show(&s, card, note.as_deref());
+        self.detail.show(&s, card);
         *self.opened.borrow_mut() = Some(uuid.to_string());
         self.reveal.set_reveal_child(true);
     }
 
-    /// Opens the first card whose title contains `text` (for screenshots).
-    pub fn open_titled(&self, text: &str) {
+    fn new_task(self: &Rc<Self>, title: &str) {
         let s = self.snap.borrow().clone();
-        if let Some(c) = s.cards.iter().find(|c| c.title.contains(text)) {
+        self.detail.show_new(&s, title, self.world.title_limit());
+        // An empty uuid: the pane is open, on no card.
+        *self.opened.borrow_mut() = Some(String::new());
+        self.reveal.set_reveal_child(true);
+    }
+
+    /// Opens the first open card whose title contains `text`, else the
+    /// first finished one (for screenshots).
+    pub fn open_titled(self: &Rc<Self>, text: &str) {
+        let s = self.snap.borrow().clone();
+        let hit = |open: bool| {
+            s.cards
+                .iter()
+                .find(|c| c.title.contains(text) && c.ended.is_none() == open)
+        };
+        if let Some(c) = hit(true).or_else(|| hit(false)) {
             self.open(&c.uuid);
+        }
+    }
+
+    /// Opens the card with this uuid, or the start of one.
+    pub fn open_card(self: &Rc<Self>, id: &str) {
+        let s = self.snap.borrow().clone();
+        if let Some(c) = s.cards.iter().find(|c| c.uuid.starts_with(id)) {
+            self.open(&c.uuid);
+        }
+    }
+
+    /// Runs a `/` line as if it had been typed (for checks without a pointer).
+    pub fn type_line(self: &Rc<Self>, text: &str) {
+        self.line.set_text(text);
+        let first = self.found_runs.borrow().first().cloned();
+        if let Some(run) = first {
+            run();
         }
     }
 
     fn close(&self) {
         self.opened.borrow_mut().take();
+        self.detail.settle();
         self.reveal.set_reveal_child(false);
+        self.page.grab_focus();
     }
 
     /// Draws the window into a PNG at `size`, then quits. The size is forced

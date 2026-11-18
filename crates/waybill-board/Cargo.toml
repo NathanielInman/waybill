@@ -1,6 +1,6 @@
 [package]
 name = "waybill-board"
-description = "Waybill's board: the GTK4 window"
+description = "Waybill's board: the GTK4 window and the layer-shell Desk drawer"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,6 +12,9 @@ publish = false
 # The board is a GTK4 window, built for Linux.
 [target.'cfg(target_os = "linux")'.dependencies]
 waybill-core = { path = "../waybill-core" }
+bar-anchor = { path = "../bar-anchor" }
 gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
+gtk4-layer-shell = "0.8"
 async-channel = "2"
 serde_json.workspace = true
+anyhow.workspace = true

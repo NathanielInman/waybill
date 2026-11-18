@@ -2,7 +2,7 @@
 //! watches that reread it when the database changes and restyle the board
 //! when the bar's stylesheet or Waybill's config does.
 
-use crate::shell::{Msg, Notes, Shell};
+use crate::shell::{Msg, Shell, World};
 use crate::theme::Palette;
 use crate::views::Tab;
 use gtk::prelude::*;
@@ -24,12 +24,15 @@ waybill-board: the Waybill window
 Usage:
   waybill-board                 Open the board on your task list
   waybill-board --demo          Open it on a made-up studio's list
+  waybill-board --card <uuid>   Open it with one card showing
+  waybill-board --drawer        Run the Desk drawer (`waybill toggle` starts it)
 
 For screenshots and checking a layout without a desktop:
   --snapshot <file.json>        Draw a snapshot saved by `waybill snapshot`
   --shot <out.png>              Draw one frame into a PNG and exit
   --tab <board|desk|lines|log|pulse>
   --open <text>                 Open the first card whose title has <text>
+  --do <words>                  Type <words> on the / line and press Enter
   --size <width>x<height>";
 
 thread_local! {
@@ -92,9 +95,15 @@ fn watch(path: PathBuf, folder: bool, on_change: impl Fn() + 'static) {
     }
 }
 
+/// What this process shows: the window, or the drawer.
+enum Face {
+    Board(std::rc::Rc<Shell>),
+    Drawer(std::rc::Rc<crate::drawer::Drawer>),
+}
+
 /// Where the board's tasks come from.
 enum Source {
-    Live(Config),
+    Live(Box<Config>),
     Demo,
     File(PathBuf),
 }
@@ -204,7 +213,7 @@ pub fn main() -> glib::ExitCode {
         } else {
             let data = waybill_core::load::data_dir(&cfg);
             (
-                Source::Live(cfg.clone()),
+                Source::Live(Box::new(cfg.clone())),
                 waybill_core::load::notes_dir(&cfg),
                 data,
             )
@@ -217,20 +226,42 @@ pub fn main() -> glib::ExitCode {
             .unwrap_or((1560, 960));
 
         let (tx, rx) = async_channel::unbounded::<Msg>();
-        let shell = Shell::new(
-            app,
-            tx.clone(),
-            match source {
-                Source::Demo => Notes::Demo,
-                _ => Notes::Dir(notes.clone()),
-            },
-            size,
-        );
-        if let Some(tab) = arg(&args, "--tab").as_deref().and_then(Tab::parse) {
-            shell.set_tab(tab);
-        }
-
         let (wake, woken) = mpsc::channel::<()>();
+        let world = World {
+            desk: matches!(source, Source::Live(_)).then(|| {
+                Arc::new(waybill_core::agent::Desk {
+                    cfg: cfg.clone(),
+                    notes: notes.clone(),
+                    zone: Zone::Local,
+                })
+            }),
+            demo: matches!(source, Source::Demo),
+        };
+        let drawer = args.iter().any(|a| a == "--drawer");
+        let face = if drawer {
+            if shot.is_none() && !crate::drawer::listen(tx.clone()) {
+                eprintln!("waybill-board: a drawer is already running");
+                app.quit();
+                return;
+            }
+            // Asking a display that is not Wayland makes the library complain.
+            let wayland = gdk::Display::default().is_some_and(|d| d.backend().is_wayland());
+            let layer = shot.is_none() && wayland && gtk4_layer_shell::is_supported();
+            Face::Drawer(crate::drawer::Drawer::new(
+                app,
+                tx.clone(),
+                world,
+                wake.clone(),
+                layer,
+            ))
+        } else {
+            let shell = Shell::new(app, tx.clone(), world, wake.clone(), size);
+            if let Some(tab) = arg(&args, "--tab").as_deref().and_then(Tab::parse) {
+                shell.set_tab(tab);
+            }
+            Face::Board(shell)
+        };
+
         let quiet = Arc::new(AtomicI64::new(0));
         if shot.is_none() {
             // The database and the notes beside it.
@@ -261,20 +292,45 @@ pub fn main() -> glib::ExitCode {
         });
 
         let open = arg(&args, "--open");
+        let card = arg(&args, "--card");
+        let typed = arg(&args, "--do");
         let app = app.clone();
-        shell.window.present();
+        match &face {
+            Face::Board(shell) => shell.window.present(),
+            // The drawer stays hidden until it is toggled; hold the app open.
+            Face::Drawer(_) => std::mem::forget(app.hold()),
+        }
         glib::spawn_future_local(async move {
             let mut first = true;
             while let Ok(msg) = rx.recv().await {
                 let is_snapshot = matches!(msg, Msg::Snapshot(_));
-                shell.handle(msg);
-                if first && is_snapshot {
-                    first = false;
-                    if let Some(text) = &open {
-                        shell.open_titled(text);
+                match &face {
+                    Face::Board(shell) => shell.handle(msg),
+                    Face::Drawer(d) => d.handle(msg),
+                }
+                if !(first && is_snapshot) {
+                    continue;
+                }
+                first = false;
+                match &face {
+                    Face::Board(shell) => {
+                        if let Some(text) = &open {
+                            shell.open_titled(text);
+                        }
+                        if let Some(id) = &card {
+                            shell.open_card(id);
+                        }
+                        if let Some(text) = &typed {
+                            shell.type_line(text);
+                        }
+                        if let Some(out) = shot.clone() {
+                            shell.shoot(out, size, app.clone());
+                        }
                     }
-                    if let Some(out) = shot.clone() {
-                        shell.shoot(out, size, app.clone());
+                    Face::Drawer(d) => {
+                        if let Some(out) = shot.clone() {
+                            d.shoot(out, app.clone());
+                        }
                     }
                 }
             }
