@@ -5,26 +5,33 @@ for whatever you change.
 
 ## Crates
 
-- `waybill-core`: the model. `task.rs` reads what `task export` prints,
-  `model.rs` sorts tasks into lanes and works out what each one frees,
-  `lines.rs` lays dependency chains out as rail lines, `pulse.rs` counts what
-  the charts draw, `note.rs` reads a note far enough to lay it out, `demo.rs`
-  builds a made-up list. Plain data in, plain data out: no UI, no clock of
-  its own (callers pass `now` and a `Zone`), and nothing that writes to the
-  task database. A new rule about where a task sits belongs in `model.rs`
-  with a test.
-- `waybill`: the CLI (one binary, `waybill`).
-- `waybill-board`: the GTK4 window. `shell.rs` is the frame, `views/` holds
-  one file per view, `detail.rs` is the card pane, and everything drawn with
-  cairo (charts, rail lines, the marks on cards) is in `charts.rs`.
-  `theme.rs` owns the palette, which feeds both the CSS and the charts.
+- `waybill-core`: the model and the protocol. `task.rs` reads what
+  `task export` prints, `model.rs` sorts tasks into lanes and works out what
+  each one frees, `lines.rs` lays dependency chains out as rail lines,
+  `pulse.rs` counts what the charts draw, `lamp.rs` is the one lamp rule.
+  Those are plain data in, plain data out: callers pass `now` and a `Zone`.
+  `act.rs` is every change to the list (each one a `task` command),
+  `claim.rs` is who holds a started task, `agent.rs` is the pick-up protocol
+  built on both, `lint.rs` the house rules. A new rule about where a task
+  sits belongs in `model.rs` with a test; a new way to change the list
+  belongs in `act.rs` with a case in `tests/e2e.rs`.
+- `waybill`: the CLI and the waybar module (one binary, `waybill`).
+- `waybill-board`: the GTK4 window and the drawer. `shell.rs` is the frame,
+  `views/` holds one file per view, `detail.rs` is the card pane,
+  `actions.rs` is what a click does, `palette.rs` reads the `/` line,
+  `drawer.rs` is the layer-shell drawer, and everything drawn with cairo is
+  in `charts.rs`. `theme.rs` owns the palette, which feeds both the CSS and
+  the charts. `anim.rs` and `stage.rs` came from Tablet's board.
+- `bar-anchor`: anchoring and panel placement, no GTK. A copy of Tablet's;
+  its `Anchor` JSON must stay identical to the siblings'.
 
 ## Build and test
 
 `cargo build --workspace --locked`, `cargo test --workspace --locked`,
 `cargo clippy --workspace --all-targets -- -D warnings` and
 `cargo fmt --all -- --check`. CI runs all four. The board needs GTK 4.12 or
-newer.
+newer and gtk4-layer-shell (`.github/scripts/gtk4-layer-shell.sh` is how CI
+gets it). The end-to-end test needs a `task` binary and skips without one.
 
 To look at the board without a desktop, render it under GTK's broadway
 backend:
@@ -43,14 +50,19 @@ Look at the PNG after any change to a view, a chart or the stylesheet.
 ## The task list is real
 
 The machine you work on has a real Taskwarrior database that other sessions
-are writing to.
+are writing to, and a real desktop somebody is using.
 
 - Use `--demo` for anything visual. `waybill_core::demo` builds the same
   made-up list for the same moment, and tests assert against it.
-- Nothing in this repo writes to the task database yet. When that changes
-  (stop 2), every write goes through the `task` binary, and tests run it
-  against a throwaway `TASKDATA`, never the user's.
+- Try writes against a throwaway list: a taskrc with its own
+  `data.location`, a config whose `task.command` is `task rc:<that taskrc>`,
+  and `WAYBILL_CONFIG_DIR` and `WAYBILL_RUNTIME_DIR` pointed at temp folders.
+  `crates/waybill-core/tests/e2e.rs` does exactly this and is the model.
+  `waybill-board --open <title> --do "<words>"` runs a board action without
+  a pointer.
 - Reads pass `rc.gc=off`, so looking at the list never renumbers it.
+- `waybill toggle` opens the drawer on the real screen. Check the drawer
+  with `waybill-board --drawer --demo --shot out.png` instead.
 
 ## Privacy
 
@@ -60,7 +72,8 @@ hand, and screenshots in `docs/` come from `--demo`.
 
 ## Isolation
 
-`WAYBILL_CONFIG_DIR` points a dev build at another config folder.
+`WAYBILL_CONFIG_DIR` points a dev build at another config folder and
+`WAYBILL_RUNTIME_DIR` at another folder for claims and the drawer's socket.
 
 ## When behavior changes
 
@@ -70,5 +83,5 @@ Update in the same commit:
 - The README for anything a new user meets (views, keys, install, config).
 - `packaging/examples/config.toml` for a new config key.
 
-Commits are conventional, scoped by area: `core`, `cli`, `board`, `charts`,
-`theme`, `demo`, `docs`, `ci`.
+Commits are conventional, scoped by area: `core`, `cli`, `board`, `drawer`,
+`bar`, `anchor`, `charts`, `theme`, `demo`, `docs`, `ci`.

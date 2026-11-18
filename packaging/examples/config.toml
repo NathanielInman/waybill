@@ -17,6 +17,18 @@ hands = ["me"]
 # A task blocked on a choice. It lands in Needs you as well.
 decision = "decision"
 
+[lint]
+# What `waybill lint` and `waybill add` hold a task to.
+title = 50                              # the longest a card title may be
+tags = ["research", "bug", "verify"]    # allowed besides the tags above
+projects = []                           # known projects; empty allows any
+
+[bar]
+# What the waybar module shows when something waits on you, and when
+# nothing does. {lamp} {holding} {you} {ready} {doing} {done}
+format = "● {holding}"
+format_calm = "●"
+
 [theme]
 # "waybar" borrows the bar's colors and font from ~/.config/waybar/style.css.
 # "none" keeps the built-in theme.

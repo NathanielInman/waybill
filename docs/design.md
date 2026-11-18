@@ -22,7 +22,11 @@ tour; this is the spec.
    charts you can hover, not reports you run.
 6. **Ask nothing of memory.** Everything is reachable with the pointer, and
    every key is printed where it applies.
-7. **Leave Taskwarrior in charge.** Waybill keeps no database of its own.
+7. **Leave Taskwarrior in charge.** Waybill keeps no database of its own:
+   it reads through `task export` and writes through `task` commands.
+8. **Hold the protocol for the agents.** Picking up, logging and finishing a
+   task are single commands with JSON out, so the rules live in one binary
+   instead of in every session's instructions.
 
 ## Non-goals
 
@@ -54,7 +58,10 @@ flowchart LR
   T["task export<br/>(Taskwarrior 3)"] --> C["waybill-core<br/>model, lines, pulse"]
   N["notes/&lt;uuid&gt;.md"] --> C
   C -- "Snapshot" --> B["waybill-board<br/>GTK4 window"]
-  C -- "Snapshot as JSON" --> L["waybill CLI"]
+  C -- "Snapshot as JSON" --> L["waybill CLI<br/>next, visit, done, bar"]
+  L -- "task start, annotate, done" --> T
+  B -- "task commands" --> T
+  L <-- "claims" --> R["runtime dir"]
   W["file watch on<br/>data.location"] -. "reread" .-> B
   S["waybar style.css"] -. "palette" .-> B
 ```
@@ -64,12 +71,14 @@ Three crates:
 - **`waybill-core`**: pure functions from exported tasks to a `Snapshot`.
   No UI and no clock of its own: callers pass `now` and a `Zone`, which is
   what makes it testable and lets the demo and screenshots be exact.
-- **`waybill`**: the CLI.
-- **`waybill-board`**: the window.
+- **`waybill`**: the CLI and the waybar module.
+- **`waybill-board`**: the window, and with `--drawer` the Desk drawer.
+- **`bar-anchor`**: where the bar icon is, for the drawer. A copy of
+  Tablet's.
 
-There is no daemon yet. The board reads the list itself, on a worker thread.
-The daemon arrives with claims (stop 3) and the bar lamp (stop 4), which need
-something resident; until then it would be a process with nothing to do.
+There is no daemon. The board reads the list itself on a worker thread,
+claims are files that anyone can judge, and the only resident process is
+`waybill bar`, which waybar keeps running.
 
 ### Reading the list
 
@@ -251,36 +260,195 @@ not parse is ignored with a message and the defaults are used.
 | `notes.dir` | `""` | Notes folder; empty means `notes/` under `data.location`. |
 | `tags.hands` | `["me"]` | Tags that mean the task needs the user. |
 | `tags.decision` | `"decision"` | The tag for a task blocked on a choice. |
+| `lint.title` | `50` | The longest a card title may be. |
+| `lint.tags` | `["research", "bug", "verify"]` | Tags allowed besides the hands and decision tags. |
+| `lint.projects` | `[]` | Known projects; empty allows any. |
+| `bar.format` | `"● {holding}"` | The bar module's text when something waits on the user. |
+| `bar.format_calm` | `"●"` | The same, when nothing does. |
 | `theme.from` | `"waybar"` | `"waybar"` or `"none"`. |
 | `theme.font` | the bar's | Font family for the window and charts. |
 | `theme.accent` | the bar's | The accent color. |
 
-`WAYBILL_CONFIG_DIR` moves the config folder.
+`WAYBILL_CONFIG_DIR` moves the config folder and `WAYBILL_RUNTIME_DIR` the
+claims and the drawer's socket.
+
+## Changing the list
+
+Every change is a `task` command, built in `act.rs`: `start`, `stop`, `done`,
+`annotate`, `modify` and `add`. Taskwarrior stays in charge of urgency, hooks
+and its sync format, and `task` and vit see exactly what Waybill did.
+
+Three rules keep a write from touching more than it should:
+
+- A task is named by its **full uuid**, checked for shape before the command
+  runs. A number or a filter in that position could match many tasks.
+- Text (a visit, a title) goes after `--`, so nothing in it is read as an
+  attribute.
+- Each attribute change is one checked argument: a priority is `H`, `M`, `L`
+  or empty, a tag is letters, digits and underscores, a date or project has
+  no spaces.
+
+The command line takes the first 8 characters of a uuid and resolves them
+against the snapshot; an ambiguous or unknown prefix is an error.
+
+What the user writes on the board is signed with their name ("Nate: ..."),
+which is how agents already record what the user told them, so both read the
+same in the log.
+
+## Claims
+
+`waybill next` and `waybill start` leave a **claim**: a JSON file in
+`$XDG_RUNTIME_DIR/waybill/claims/<uuid>.json` naming who holds the task.
+
+| Field | Meaning |
+|---|---|
+| `pid`, `born` | The session's process and its start time (from `/proc/<pid>/stat`), so a reused pid is not mistaken for it. |
+| `who` | "claude in waybill (main)": the command, the folder and the branch. |
+| `session` | `WAYBILL_SESSION`, else `T3CODE_THREAD_ID`, else `CLAUDE_SESSION_ID`. |
+| `since`, `touched` | When it was taken and last used. |
+
+The session's process is the nearest ancestor of the `waybill` command that
+is not a shell or a wrapper (`bash`, `env`, `timeout`, `lowprio` and the
+like). The branch is read from `.git/HEAD`, following a worktree's `.git`
+file.
+
+A started card is one of three things:
+
+| State | When |
+|---|---|
+| **Held** | Its claim's process is alive (same pid, same start time). A claim with no process (a start made on the board) is alive for 12 hours after its last touch. |
+| **Unclaimed** | It has no claim and was started since the machine booted: started by hand, or by a session that does not use Waybill. |
+| **Stale** | Its claim is dead, or it has no claim and was started before the boot. |
+
+The runtime directory is emptied by a reboot, so no claim outlives the
+machine's session, and nothing that started before the boot can still be
+running. `waybill visit` touches the claim; `done` and `stop` remove it.
+
+## The agent protocol
+
+`agent.rs` holds the protocol as functions; the command line prints what
+they return.
+
+**`next`**, in order:
+
+1. Every stale start that is not the user's is stopped and annotated
+   ("stopped: the session that started it is gone (...); check its repo for
+   leftover work before resuming"), and its claim removed. They come back as
+   `cleared`. The user's own starts are never stopped for them.
+2. Started tasks with no visit and no start in the last 12 hours come back
+   as `long_running`, untouched: a long session can still own one.
+3. The pick is the first card of the Ready lane (highest urgency), within
+   `--project` when given. A family name matches every project under it
+   (`plos` matches `plos.db`).
+4. It is started and claimed, and returned as a **brief**: uuid, title,
+   project, priority, tags, marker, the note's path and whether it exists,
+   the visits, what it frees and waits on, and who holds it.
+
+A task that was just cleared is not picked in the same call: somebody should
+look at its repo first.
+
+`--peek` does all of that without changing anything.
+
+**`start`** claims a named task. One a live session holds is refused unless
+`--take` is given, which logs "taken over by another session".
+**`visit`** annotates and touches the claim. **`done`** logs an optional
+closing line, finishes the task, drops the claim and returns the tasks that
+waited only on it. **`stop`** logs why, stops it and drops the claim.
+
+### Decisions
+
+`waybill ask` files a decision for the user: a task with the first hands tag
+and the decision tag, and a note whose `## Options` section lists the
+choices. Given an existing task instead of a title, it tags that task and
+appends the options to its note.
+
+A ruling (`waybill rule`, an option button, or `o` in the card pane):
+
+1. logs a visit "Nate: <choice>";
+2. appends `## Decided <date>` with the choice to the note;
+3. removes the decision and hands tags, so the task returns to the Ready
+   lane for an agent to act on.
+
+### Lint
+
+`waybill lint` checks every open task: `title-long` (over `lint.title`
+characters), `title-period`, `tag-unknown` (not a hands tag, the decision
+tag or one of `lint.tags`), `no-project`, `project-unknown` (when
+`lint.projects` is set; a dotted project passes if its family is listed) and
+`no-priority`. `waybill add` refuses a title that fails the title rules
+unless `--force` is given.
+
+## Acting from the board
+
+The card pane has a button for every action, each with its key printed on
+it; the keys work while the pane is open and nothing is being typed.
+
+| Key | Action |
+|---|---|
+| `s` | Start (claimed as "Nate, at the board") or stop |
+| `d` | Finish, after an optional closing line |
+| `v` | Log a visit |
+| `w` | Park until a date, or unpark |
+| `h` `m` `l` | Priority |
+| `t` | Add the hands tag, or drop it |
+| `e` | Edit the note in place |
+| `a` `b` `c`, `o` | On a decision: rule with that option, or in your own words |
+
+`n` opens the pane as a new-task form. A lane is a drop target:
+
+| Drop on | Means |
+|---|---|
+| Doing | Start |
+| Done today | Finish |
+| Needs you | Take it |
+| Ready | Stop a started card, unpark a parked one, hand off one of yours |
+| Held | Refused: a task is held by what it waits on |
+
+The `/` line at the bottom finds cards as you type (every word must match
+the title, project, a tag or the start of the uuid) and, with a card open,
+reads a few plain words as actions: `start`, `stop`, `done [line]`,
+`visit <line>`, `rule <line>`, `high`, `medium`, `low`, `mine`,
+`hand to agent`, `park`, `unpark`, `wait until <date>`. A view's name goes
+to it and `new <title>` opens the form.
+
+Actions run on a worker thread and come back as one line in the footer; the
+list is reread at once. While the user is typing in the pane a reread does
+not rebuild it. The demo list and a saved snapshot are read-only.
+
+## The bar and the drawer
+
+`waybill bar` is the waybar module. It is the resident process: it reads the
+list, prints one JSON line (`text`, `tooltip`, `class`), then checks the
+modification times of the database files and the claims every 2 seconds and
+reads again when they change, or after a minute. The baseline is taken
+after its own read, because reading can touch the database's files. It
+prints only when the line changes and exits when waybar is gone.
+
+The lamp follows one rule, shared with the window's header (`lamp.rs`):
+`needs-you` when a task of the user's frees anything or a decision is open,
+`error` when the list cannot be read, `calm` otherwise.
+
+`waybill toggle` asks the compositor where the pointer is (`bar-anchor`, a
+copy of Tablet's) and sends `{"toggle": <anchor>}` to
+`$XDG_RUNTIME_DIR/waybill/drawer.sock`. If nothing answers it starts
+`waybill-board --drawer` and tries again for 4 seconds.
+
+The drawer is a layer-shell overlay (namespace `waybill`) holding one panel,
+placed by `stage.rs` at the anchor and animated by `anim.rs`, both from the
+sibling boards. It lists decisions first, each with up to three option
+buttons, then the user's tasks by what they free. A click on a row opens the
+board on that card (`waybill-board --card <uuid>`). Esc or a click outside
+closes it. Under a compositor without layer-shell it opens as a plain window.
 
 ## Command line
 
-`waybill snapshot` prints the snapshot as one line of JSON and exits
-non-zero if the list could not be read. `waybill lanes` prints each lane's
-count and first five cards. Both take `--demo`.
+`waybill --help` lists every command. All of them take `--json`; `snapshot`
+and `lanes` also take `--demo`. A failed command prints one line to stderr
+and exits 1.
 
-`waybill-board` takes `--demo`, and for screenshots `--snapshot <file>`,
-`--shot <png>`, `--tab <view>`, `--open <title text>` and
-`--size <w>x<h>`. `--shot` draws every chart fully grown, forces the size on
-the page (a headless display may be smaller than the window) and exits
-after one frame.
-
-## What comes next
-
-1. **Touch.** Start, stop, finish, visit, add and reprioritize from the
-   board. Every write is a `task` command, so urgency, hooks and the sync
-   format stay Taskwarrior's. Drag between lanes, a button with its key
-   printed for every action, a `/` line for plain words, decisions answered
-   with one key (writing the ruling as a visit), note editing.
-2. **Agents.** `waybill next`, `visit`, `done`, `ask` and `lint` with JSON
-   out. `next` clears stale starts, applies the pick filter and starts the
-   task under a **claim**: who holds it (session, repo, worktree, pid),
-   kept in the runtime directory so a reboot empties it. A started task
-   with no live claim is stale.
-3. **The bar.** A daemon, a waybar module whose lamp follows the header
-   lamp's rule, and a layer-shell Desk drawer anchored with `bar-anchor`
-   like Switchyard's board.
+`waybill-board` takes `--demo`, `--card <uuid>` and `--drawer`, and for
+screenshots `--snapshot <file>`, `--shot <png>`, `--tab <view>`,
+`--open <title text>`, `--do <words>` (type on the `/` line and press Enter)
+and `--size <w>x<h>`. `--shot` draws every chart fully grown, forces the
+size on the page (a headless display may be smaller than the window) and
+exits after one frame.
