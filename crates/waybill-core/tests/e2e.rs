@@ -245,5 +245,54 @@ fn an_agent_and_a_person_work_a_list() {
         Lane::Ready
     );
 
+    // An edit holds each change to the house rules and logs what it did.
+    let refused = agent::edit(
+        &desk,
+        &build[..8],
+        &[Change::AddTag("urgent".into())],
+        false,
+        now,
+    );
+    assert!(refused.unwrap_err().to_string().contains("+urgent"));
+    let edited = agent::edit(
+        &desk,
+        &build[..8],
+        &[
+            Change::Title("Build the receipt: +bug project:x status:deleted".into()),
+            Change::Ref(String::new()),
+            Change::AddTag("bug".into()),
+        ],
+        false,
+        now,
+    )
+    .unwrap();
+    assert_eq!(
+        edited.changes,
+        [
+            "title \"Build the receipt: +bug project:x status:deleted\"",
+            "ref cleared",
+            "+bug",
+        ]
+    );
+    let snap = desk.snapshot(now).unwrap();
+    let card = snap.card(&build).unwrap();
+    assert_eq!(
+        card.title,
+        "Build the receipt: +bug project:x status:deleted"
+    );
+    assert_eq!(
+        (card.project.as_str(), card.lane),
+        ("storefront", Lane::Ready)
+    );
+    assert_eq!(card.reference, None);
+    assert_eq!(card.tags, ["bug"]);
+    assert!(
+        card.visits
+            .last()
+            .unwrap()
+            .text
+            .starts_with("edited: title")
+    );
+
     let _ = std::fs::remove_dir_all(&dir);
 }

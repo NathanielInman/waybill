@@ -42,6 +42,35 @@ fn known_project(project: &str, known: &[String]) -> bool {
         })
 }
 
+fn tag_rules(tags: &[String], cfg: &Config) -> Vec<(&'static str, String)> {
+    tags.iter()
+        .filter(|tag| {
+            !(cfg.tags.hands.contains(tag)
+                || **tag == cfg.tags.decision
+                || cfg.lint.tags.contains(tag))
+        })
+        .map(|tag| {
+            (
+                "tag-unknown",
+                format!("+{tag} is not one of the list's tags"),
+            )
+        })
+        .collect()
+}
+
+fn project_rules(project: &str, cfg: &Config) -> Vec<(&'static str, String)> {
+    if project.is_empty() {
+        vec![("no-project", "the task has no project".into())]
+    } else if !known_project(project, &cfg.lint.projects) {
+        vec![(
+            "project-unknown",
+            format!("{project} is not a known project"),
+        )]
+    } else {
+        vec![]
+    }
+}
+
 /// What is wrong with one task's shape, as (rule, message): the title
 /// rules, then tags, project and priority. `waybill lint` runs it over the
 /// open list and `waybill add` over a task before it is filed.
@@ -53,29 +82,28 @@ pub fn shape(
     cfg: &Config,
 ) -> Vec<(&'static str, String)> {
     let mut out = title(title_text, cfg.lint.title);
-    for tag in tags {
-        let allowed = cfg.tags.hands.contains(tag)
-            || *tag == cfg.tags.decision
-            || cfg.lint.tags.contains(tag);
-        if !allowed {
-            out.push((
-                "tag-unknown",
-                format!("+{tag} is not one of the list's tags"),
-            ));
-        }
-    }
-    if project.is_empty() {
-        out.push(("no-project", "the task has no project".into()));
-    } else if !known_project(project, &cfg.lint.projects) {
-        out.push((
-            "project-unknown",
-            format!("{project} is not a known project"),
-        ));
-    }
+    out.extend(tag_rules(tags, cfg));
+    out.extend(project_rules(project, cfg));
     if priority.is_none_or(str::is_empty) {
         out.push(("no-priority", "the task has no priority".into()));
     }
     out
+}
+
+/// What a change to a task would break. Only the changed field is judged,
+/// so editing a card that already breaks a rule elsewhere is not refused.
+pub fn change(c: &crate::act::Change, cfg: &Config) -> Vec<(&'static str, String)> {
+    use crate::act::Change;
+    match c {
+        Change::Title(t) => title(
+            &t.split_whitespace().collect::<Vec<_>>().join(" "),
+            cfg.lint.title,
+        ),
+        Change::AddTag(t) => tag_rules(std::slice::from_ref(t), cfg),
+        Change::Project(p) => project_rules(p.trim(), cfg),
+        Change::Priority(' ') => vec![("no-priority", "the task has no priority".into())],
+        _ => vec![],
+    }
 }
 
 /// What is wrong with a task about to be added.
@@ -200,5 +228,31 @@ mod tests {
         };
         let rules: Vec<&str> = new_task(&bare, &cfg).iter().map(|r| r.0).collect();
         assert_eq!(rules, ["no-project"]);
+    }
+
+    #[test]
+    fn a_change_is_judged_on_its_own_field() {
+        use crate::act::Change;
+        let mut cfg = Config::default();
+        cfg.lint.projects = vec!["plos".into()];
+        let rule = |c: Change| {
+            change(&c, &cfg)
+                .into_iter()
+                .map(|r| r.0)
+                .collect::<Vec<_>>()
+        };
+        assert!(rule(Change::Title("Wire the cart".into())).is_empty());
+        assert_eq!(
+            rule(Change::Title("Wire the cart.".into())),
+            ["title-period"]
+        );
+        assert_eq!(rule(Change::AddTag("urgent".into())), ["tag-unknown"]);
+        assert!(rule(Change::AddTag("bug".into())).is_empty());
+        assert!(rule(Change::DropTag("urgent".into())).is_empty());
+        assert_eq!(rule(Change::Project("etb".into())), ["project-unknown"]);
+        assert_eq!(rule(Change::Project(String::new())), ["no-project"]);
+        assert!(rule(Change::Project("plos.db".into())).is_empty());
+        assert_eq!(rule(Change::Priority(' ')), ["no-priority"]);
+        assert!(rule(Change::Priority('H')).is_empty());
     }
 }

@@ -343,6 +343,83 @@ pub fn visit(desk: &Desk, id: &str, text: &str, now: i64) -> anyhow::Result<Name
     Ok(Named::from(card))
 }
 
+/// What `edit` changed, in words.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Edited {
+    pub task: Named,
+    pub changes: Vec<String>,
+}
+
+fn describe(c: &Change) -> String {
+    match c {
+        Change::Priority(' ') => "priority cleared".into(),
+        Change::Priority(p) => format!("priority {p}"),
+        Change::AddTag(t) => format!("+{t}"),
+        Change::DropTag(t) => format!("-{t}"),
+        Change::Wait(w) if w.is_empty() => "shown again".into(),
+        Change::Wait(w) => format!("parked until {w}"),
+        Change::Project(p) => format!("project {p}"),
+        Change::Title(t) => format!(
+            "title \"{}\"",
+            t.split_whitespace().collect::<Vec<_>>().join(" ")
+        ),
+        Change::Ref(r) if r.is_empty() => "ref cleared".into(),
+        Change::Ref(r) => format!("ref {r}"),
+    }
+}
+
+/// Changes an open task's attributes, holding each change to the house
+/// rules unless `force`, and logs a visit naming what changed.
+pub fn edit(
+    desk: &Desk,
+    id: &str,
+    changes: &[Change],
+    force: bool,
+    now: i64,
+) -> anyhow::Result<Edited> {
+    if changes.is_empty() {
+        bail!("nothing to change: give --priority, --tag, --untag, --project, --title or --ref");
+    }
+    let snap = desk.snapshot(now)?;
+    let card = resolve(&snap, id)?;
+    if card.ended.is_some() {
+        bail!("{:?} is already finished", card.title);
+    }
+    if !force {
+        let problems: Vec<String> = changes
+            .iter()
+            .flat_map(|c| crate::lint::change(c, &desk.cfg))
+            .map(|p| p.1)
+            .collect();
+        if !problems.is_empty() {
+            bail!("{}; pass --force to change it anyway", problems.join("; "));
+        }
+    }
+    act::modify(&desk.cfg, &card.uuid, changes)?;
+    let words: Vec<String> = changes.iter().map(describe).collect();
+    act::annotate(
+        &desk.cfg,
+        &card.uuid,
+        &format!("edited: {}", words.join(", ")),
+    )?;
+    claim::touch(&card.uuid, now);
+    let mut task = Named::from(card);
+    if let Some(Change::Title(t)) = changes.iter().rev().find(|c| matches!(c, Change::Title(_))) {
+        task.title = t.split_whitespace().collect::<Vec<_>>().join(" ");
+    }
+    if let Some(Change::Project(p)) = changes
+        .iter()
+        .rev()
+        .find(|c| matches!(c, Change::Project(_)))
+    {
+        task.project = p.clone();
+    }
+    Ok(Edited {
+        task,
+        changes: words,
+    })
+}
+
 /// Finishes a task, with an optional closing line, and says what that freed.
 pub fn done(desk: &Desk, id: &str, text: Option<&str>, now: i64) -> anyhow::Result<Closed> {
     let snap = desk.snapshot(now)?;

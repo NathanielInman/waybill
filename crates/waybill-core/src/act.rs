@@ -64,6 +64,10 @@ pub enum Change {
     /// the task again.
     Wait(String),
     Project(String),
+    /// A new card title.
+    Title(String),
+    /// The `ref` marker; empty clears it.
+    Ref(String),
 }
 
 impl Change {
@@ -79,6 +83,15 @@ impl Change {
             Change::Wait(w) => bail!("{w:?} is not one date"),
             Change::Project(p) if !p.contains(char::is_whitespace) => format!("project:{p}"),
             Change::Project(p) => bail!("{p:?} is not a project name"),
+            Change::Title(t) => {
+                let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
+                if t.is_empty() {
+                    bail!("a task needs a title");
+                }
+                format!("description:{t}")
+            }
+            Change::Ref(r) if !r.contains(char::is_whitespace) => format!("ref:{r}"),
+            Change::Ref(r) => bail!("{r:?} is not one marker"),
         })
     }
 }
@@ -205,5 +218,16 @@ mod tests {
         assert!(Change::AddTag("a b".into()).arg().is_err());
         assert!(Change::Wait("next friday".into()).arg().is_err());
         assert!(Change::Project("a status:pending".into()).arg().is_err());
+        assert_eq!(
+            Change::Title(" Wire  the\ncart ".into()).arg().unwrap(),
+            "description:Wire the cart"
+        );
+        assert!(Change::Title("  ".into()).arg().is_err());
+        assert_eq!(
+            Change::Ref("item-system".into()).arg().unwrap(),
+            "ref:item-system"
+        );
+        assert_eq!(Change::Ref(String::new()).arg().unwrap(), "ref:");
+        assert!(Change::Ref("a b".into()).arg().is_err());
     }
 }
