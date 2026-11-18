@@ -7,7 +7,7 @@ mod bar;
 use anyhow::{Context, bail};
 use serde::Serialize;
 use std::collections::HashMap;
-use waybill_core::act::{self, NewTask};
+use waybill_core::act::{self, Change, NewTask};
 use waybill_core::agent::{self, Brief, Desk};
 use waybill_core::clock::{self, Zone};
 use waybill_core::config::Config;
@@ -33,6 +33,9 @@ Changing the list:
               [--after ID]... [--note TEXT | --note-file F] [--force] -- TITLE
                                         Add a task; refuses what lint would flag
                                         unless --force
+  waybill edit ID [--priority H|M|L] [--tag T]... [--untag T]... [--project P]
+              [--title TEXT] [--ref R] [--force]
+                                        Change a task; refuses what lint would flag
   waybill ask [ID] [--project P] [--priority P] --option O... [--context TEXT] [-- TITLE]
                                         File a decision for the user, with its options
   waybill rule ID TEXT...               Record the user's ruling on a decision
@@ -51,7 +54,9 @@ ID is a task's uuid or its first 8 characters. --demo reads a made-up list.
 The board itself is `waybill-board`.";
 
 /// Flags that take a value. Everything else starting with `--` is a switch.
-const VALUED: [&str; 9] = [
+const VALUED: [&str; 11] = [
+    "--untag",
+    "--title",
     "--project",
     "--priority",
     "--tag",
@@ -329,6 +334,32 @@ fn run() -> anyhow::Result<()> {
             let n = agent::rule(&desk(), id, &text, now)?;
             print(json, &n, || {
                 println!("Ruled on {} {}", &n.uuid[..8], n.title)
+            })
+        }
+        "edit" => {
+            let (id, rest) = a.id_and_text("edit")?;
+            if !rest.is_empty() {
+                bail!("edit takes flags, not words: did you mean --title?");
+            }
+            let mut changes = Vec::new();
+            if let Some(p) = priority(&a)? {
+                changes.push(Change::Priority(p));
+            }
+            changes.extend(a.all("--tag").into_iter().map(Change::AddTag));
+            changes.extend(a.all("--untag").into_iter().map(Change::DropTag));
+            if let Some(p) = a.one("--project") {
+                changes.push(Change::Project(p.to_string()));
+            }
+            if let Some(t) = a.one("--title") {
+                changes.push(Change::Title(t.to_string()));
+            }
+            if let Some(r) = a.one("--ref") {
+                changes.push(Change::Ref(r.to_string()));
+            }
+            let e = agent::edit(&desk(), id, &changes, a.has("--force"), now)?;
+            print(json, &e, || {
+                println!("Edited {} {}", &e.task.uuid[..8], e.task.title);
+                println!("  {}", e.changes.join(", "));
             })
         }
         "add" => {

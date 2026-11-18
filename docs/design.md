@@ -392,6 +392,16 @@ A ruling (`waybill rule`, an option button, or `o` in the card pane):
 3. removes the decision and hands tags, so the task returns to the Ready
    lane for an agent to act on.
 
+### Edit
+
+`waybill edit ID [--priority P] [--tag T]... [--untag T]... [--project P]
+[--title TEXT] [--ref R]` changes an open task through `act::modify`. Each
+change is judged on its own field (`lint::change`), so a card that already
+breaks a rule elsewhere can still be edited; `--force` skips the check. It
+logs a visit, "edited: priority H, +bug", and touches the claim. A title goes
+to Taskwarrior as one `description:` argument, so words like `+bug` or
+`project:x` in it stay words.
+
 ### Find
 
 `waybill find [--project P] [--all] WORDS...` searches before adding. Every
