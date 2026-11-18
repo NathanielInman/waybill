@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/screens/pulse.png" width="100%" alt="The Pulse view on a made-up list: four tiles with sparklines for finished today, finished this week, visits and open tasks, a six-week chart of tasks finished and added per day, a ring comparing the two this week, open work split by who it waits on, a heat map of visits by weekday and hour, projects with their sparklines, and how long tasks live.">
+  <img src="docs/assets/hero.svg" width="100%" alt="A floating waybar of frosted pills whose Waybill dot is dim. In a terminal an agent runs waybill ask with two options for a launch discount, and the dot turns amber with a 1 beside it. A click opens the Waybill drawer out of it: three tasks wait on you, the decision first with its options as buttons. A click on the first option writes the ruling: the decision leaves the drawer, the lamp goes dim, and in the terminal the agent's waybill next starts that task with the ruling on it as a visit. A click outside closes the drawer.">
 </p>
 
 A waybill is the paper that rides with every freight car: what it carries,
@@ -57,6 +57,12 @@ can take, and work that needs **my hands**.
 
 ## The views
 
+<p align="center">
+  <img src="docs/assets/screens/pulse.png" width="100%" alt="The Pulse view on a made-up list: four tiles with sparklines for finished today, finished this week, visits and open tasks, a six-week chart of tasks finished and added per day, a ring comparing the two this week, open work split by who it waits on, a heat map of visits by weekday and hour, projects with their sparklines, and how long tasks live.">
+</p>
+
+<p align="center"><sub><b>Pulse.</b> Six weeks of what was added and finished, open work split by who it waits on, when the work happens, where it goes and how long a task lives. Hover any chart for the numbers.</sub></p>
+
 <table>
   <tr>
     <td width="50%" valign="top"><img src="docs/assets/screens/board.png" alt="The Board view: five lanes of cards for ready, doing, needs you, held and done today."><br><b>Board.</b> Where is everything right now? Ready for agents, doing, needs you, held, done today. A started card names the session that holds it. Drag a card to Doing to start it, to Done to finish it, to Needs you to take it.</td>
@@ -71,9 +77,6 @@ can take, and work that needs **my hands**.
     <td valign="top"><img src="docs/assets/screens/drawer.png" width="62%" alt="The drawer: the tasks that wait on the user, decisions first, and a sparkline of finished tasks."><br><b>The drawer.</b> A click on the bar lamp opens the short version: what waits on you, decisions you can settle on the spot, and how the week is going.</td>
   </tr>
 </table>
-
-**Pulse** is the picture at the top of this page. Hover any chart for the
-numbers.
 
 These are screenshots of `waybill-board --demo`, a made-up studio's list you
 can open without touching your own.

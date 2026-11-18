@@ -47,6 +47,15 @@ first card whose title contains the text; `--size 1560x960` sets the frame.
 Look at the PNG after any change to a view, a chart or the stylesheet.
 `WAYBILL_TRACE=1` prints a line each time the board rereads the list.
 
+## The hero
+
+`python3 docs/assets/hero.py` writes `docs/assets/hero.svg`, the README's
+animation. The drawer in it is drawn by `draw_drawer()` above the line that
+reads `# ---- end of the panel ----`; dot-files' bar tour
+(`docs/bar/apps.py` there) runs that top part to draw the same drawer. So
+when the drawer changes in `drawer.rs`, change it in `hero.py` too, keep
+the panel's code above the line, and rerun both builds.
+
 ## The task list is real
 
 The machine you work on has a real Taskwarrior database that other sessions
