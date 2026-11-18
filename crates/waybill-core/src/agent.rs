@@ -178,17 +178,42 @@ pub fn resolve<'a>(snap: &'a Snapshot, id: &str) -> anyhow::Result<&'a Card> {
 }
 
 fn in_project(card: &Card, filter: Option<&str>) -> bool {
-    match filter {
-        None => true,
-        // A family name matches every project under it.
-        Some(f) => {
-            card.project == f
-                || card
-                    .project
-                    .strip_prefix(f)
-                    .is_some_and(|r| r.starts_with('.'))
-        }
-    }
+    // A family name matches every project under it.
+    filter.is_none_or(|f| crate::find::in_family(&card.project, f))
+}
+
+/// Searches the list: open tasks, and closed ones too with `closed`. One
+/// export feeds both the search and the lanes it reports.
+pub fn find(
+    desk: &Desk,
+    words: &[String],
+    project: Option<&str>,
+    closed: bool,
+    now: i64,
+) -> anyhow::Result<Vec<crate::find::Found>> {
+    let tasks = crate::load::export(&desk.cfg)?;
+    let noted = desk
+        .notes
+        .as_deref()
+        .map(crate::load::noted)
+        .unwrap_or_default();
+    let snap = crate::model::build(
+        &tasks,
+        &noted,
+        &crate::load::rules(&desk.cfg),
+        now,
+        desk.zone,
+    );
+    let note = |uuid: &str| {
+        let dir = desk.notes.as_deref()?;
+        noted
+            .contains(uuid)
+            .then(|| act::read_note(dir, uuid))
+            .flatten()
+    };
+    Ok(crate::find::search(
+        &tasks, &snap, note, words, project, closed,
+    ))
 }
 
 /// Clears abandoned starts, then picks the most urgent ready task and (unless

@@ -10,6 +10,7 @@ pub mod claim;
 pub mod clock;
 pub mod config;
 pub mod demo;
+pub mod find;
 pub mod lamp;
 pub mod lines;
 pub mod lint;
