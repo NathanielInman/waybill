@@ -42,44 +42,74 @@ fn known_project(project: &str, known: &[String]) -> bool {
         })
 }
 
+/// What is wrong with one task's shape, as (rule, message): the title
+/// rules, then tags, project and priority. `waybill lint` runs it over the
+/// open list and `waybill add` over a task before it is filed.
+pub fn shape(
+    title_text: &str,
+    project: &str,
+    priority: Option<&str>,
+    tags: &[String],
+    cfg: &Config,
+) -> Vec<(&'static str, String)> {
+    let mut out = title(title_text, cfg.lint.title);
+    for tag in tags {
+        let allowed = cfg.tags.hands.contains(tag)
+            || *tag == cfg.tags.decision
+            || cfg.lint.tags.contains(tag);
+        if !allowed {
+            out.push((
+                "tag-unknown",
+                format!("+{tag} is not one of the list's tags"),
+            ));
+        }
+    }
+    if project.is_empty() {
+        out.push(("no-project", "the task has no project".into()));
+    } else if !known_project(project, &cfg.lint.projects) {
+        out.push((
+            "project-unknown",
+            format!("{project} is not a known project"),
+        ));
+    }
+    if priority.is_none_or(str::is_empty) {
+        out.push(("no-priority", "the task has no priority".into()));
+    }
+    out
+}
+
+/// What is wrong with a task about to be added.
+pub fn new_task(new: &crate::act::NewTask, cfg: &Config) -> Vec<(&'static str, String)> {
+    let title = new.title.split_whitespace().collect::<Vec<_>>().join(" ");
+    let priority = new.priority.map(|p| p.to_string());
+    shape(
+        &title,
+        new.project.as_deref().unwrap_or("").trim(),
+        priority.as_deref(),
+        &new.tags,
+        cfg,
+    )
+}
+
 /// Checks every open task.
 pub fn check(tasks: &[Task], cfg: &Config) -> Vec<Finding> {
     let mut out = Vec::new();
     for t in tasks.iter().filter(|t| t.open()) {
         let project = t.project.clone().unwrap_or_default();
-        let mut add = |rule: &'static str, message: String| {
+        for (rule, message) in shape(
+            &t.description,
+            &project,
+            t.priority.as_deref(),
+            &t.tags,
+            cfg,
+        ) {
             out.push(Finding {
                 uuid: t.uuid.clone(),
                 title: t.description.clone(),
                 project: project.clone(),
                 rule,
                 message,
-            })
-        };
-        for (rule, message) in title(&t.description, cfg.lint.title) {
-            add(rule, message);
-        }
-        for tag in &t.tags {
-            let allowed = cfg.tags.hands.contains(tag)
-                || *tag == cfg.tags.decision
-                || cfg.lint.tags.contains(tag);
-            if !allowed {
-                add(
-                    "tag-unknown",
-                    format!("+{tag} is not one of the list's tags"),
-                );
-            }
-        }
-        if project.is_empty() {
-            add("no-project", "the task has no project".into());
-        } else if !known_project(&project, &cfg.lint.projects) {
-            add(
-                "project-unknown",
-                format!("{project} is not a known project"),
-            );
-        }
-        if t.priority.as_deref().is_none_or(str::is_empty) {
-            add("no-priority", "the task has no priority".into());
+            });
         }
     }
     out
@@ -131,5 +161,44 @@ mod tests {
         );
         assert!(found[2].message.contains("+urgent"));
         assert!(title("Short and plain", 50).is_empty());
+    }
+
+    #[test]
+    fn a_new_task_is_held_to_the_same_rules() {
+        use crate::act::NewTask;
+        let mut cfg = Config::default();
+        cfg.lint.projects = vec!["plos".into()];
+        let good = NewTask {
+            title: "Wire the  victory screen".into(),
+            project: Some("plos.db".into()),
+            priority: Some('M'),
+            tags: vec!["bug".into(), "me".into(), "decision".into()],
+            ..Default::default()
+        };
+        assert!(new_task(&good, &cfg).is_empty());
+        let bad = NewTask {
+            title: "Wire the victory screen.".into(),
+            project: Some("plosive".into()),
+            priority: None,
+            tags: vec!["urgent".into()],
+            ..Default::default()
+        };
+        let rules: Vec<&str> = new_task(&bad, &cfg).iter().map(|r| r.0).collect();
+        assert_eq!(
+            rules,
+            [
+                "title-period",
+                "tag-unknown",
+                "project-unknown",
+                "no-priority"
+            ]
+        );
+        let bare = NewTask {
+            title: "Loose end".into(),
+            priority: Some('L'),
+            ..Default::default()
+        };
+        let rules: Vec<&str> = new_task(&bare, &cfg).iter().map(|r| r.0).collect();
+        assert_eq!(rules, ["no-project"]);
     }
 }
