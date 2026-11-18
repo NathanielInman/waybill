@@ -38,6 +38,8 @@ pub enum Msg {
     Did(Result<String, String>),
     /// Open the new-task form with this title.
     New(String),
+    /// Another `waybill-board` was started: come forward, on this card.
+    Present(Option<String>),
     /// Show or hide the drawer, at this anchor (the drawer only).
     Toggle(Option<bar_anchor::Anchor>),
 }
@@ -487,6 +489,16 @@ impl Shell {
                 let _ = self.wake.send(());
             }
             Msg::New(title) => self.new_task(&title),
+            Msg::Present(card) => {
+                if std::env::var_os("WAYBILL_TRACE").is_some() {
+                    eprintln!("waybill-board: asked forward, card {card:?}");
+                }
+                if let Some(id) = card {
+                    self.open_card(&id);
+                }
+                self.window.present();
+                crate::app::raise();
+            }
             Msg::Toggle(_) => {}
         }
     }

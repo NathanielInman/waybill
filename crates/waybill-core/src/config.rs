@@ -11,6 +11,16 @@ pub struct Config {
     pub theme: ThemeCfg,
     pub lint: LintCfg,
     pub bar: BarCfg,
+    pub board: BoardCfg,
+}
+
+/// How the board's window behaves.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct BoardCfg {
+    /// Open the window fullscreen, over the bar. Off by default: the window
+    /// is an ordinary one the compositor places.
+    pub fullscreen: bool,
 }
 
 /// The house rules `waybill lint` checks open tasks against.
@@ -149,6 +159,13 @@ mod tests {
         assert_eq!(c.tags.hands, ["nate"]);
         assert_eq!(c.tags.decision, "decision");
         assert_eq!(c.theme.from, "none");
+        assert!(!c.board.fullscreen);
+        assert!(
+            Config::parse("[board]\nfullscreen = true")
+                .unwrap()
+                .board
+                .fullscreen
+        );
         assert!(Config::parse("[tags]\nhand = 1").is_err());
     }
 }

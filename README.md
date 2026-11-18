@@ -167,6 +167,34 @@ the icon; a right-click opens the board. The module's class is `calm`,
 #custom-waybill.error { color: #bf616a; }
 ```
 
+## A board that lives on a workspace
+
+Out of the box the board is an ordinary window: start it when you want it,
+close it when you are done. It can also be the thing that is always open on
+one workspace, the way a terminal list used to be. That is a choice for your
+compositor's config, and Waybill is built to be used that way:
+
+- **One board.** A second `waybill-board` does not open a second window. It
+  hands itself to the one already running, which comes forward. So the bar
+  lamp's right-click, the drawer's "Open the board" and a click on a drawer
+  row all land on the board you already have, on the card you clicked,
+  whatever workspace it lives on.
+- **A stable class.** The window's app id is
+  `io.github.nathanielinman.Waybill`, for window rules.
+- **Fullscreen, if you want it.** `waybill-board --fullscreen`, or
+  `fullscreen = true` under `[board]`, covers the bar. Without it the window
+  fills whatever the compositor gives it.
+
+On Hyprland, for a board that is always on workspace 6:
+
+```ini
+exec-once = [workspace 6 silent] waybill-board
+windowrule = workspace 6, class:io.github.nathanielinman.Waybill
+```
+
+Coming forward across workspaces is asked of the compositor (Hyprland and
+sway today); elsewhere the board asks for attention and stays where it is.
+
 ## Config
 
 `~/.config/waybill/config.toml`. Every key is optional

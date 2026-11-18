@@ -220,6 +220,28 @@ The note is laid out by `note.rs`, which reads headings, paragraphs,
 bullets, `- [ ]` checkboxes, fenced code, inline code and bold. It is not a
 Markdown implementation and does not try to be.
 
+### One board, wherever it lives
+
+The board on the real list is a single window. `waybill-board` first tries
+`$XDG_RUNTIME_DIR/waybill/board.sock`: if a board answers, the new process
+sends `{"present": {"card": <uuid or null>}}` and exits. The running board
+opens that card, presents itself and asks the compositor to focus it
+(`hyprctl dispatch` with a Lua dispatcher, falling back to `focuswindow`,
+or `swaymsg`), because a Wayland window cannot bring itself forward from
+another workspace. Without a compositor it knows how to ask, it only
+presents itself.
+
+This is what lets a board live permanently on one workspace: the drawer
+and the bar do not need to know where it is, and never open a second one.
+Where it lives and whether it starts at login belong to the compositor's
+config (an autostart line and a window rule on the app id
+`io.github.nathanielinman.Waybill`); Waybill has no default for either.
+`--fullscreen`, or `board.fullscreen = true`, opens it fullscreen;
+`--windowed` overrides the config.
+
+`--demo`, `--snapshot`, `--shot` and `--drawer` are always their own
+processes and do not hand off.
+
 ### Drawing
 
 Everything that is drawn rather than laid out lives in `charts.rs` as a
@@ -265,6 +287,7 @@ not parse is ignored with a message and the defaults are used.
 | `lint.projects` | `[]` | Known projects; empty allows any. |
 | `bar.format` | `"● {holding}"` | The bar module's text when something waits on the user. |
 | `bar.format_calm` | `"●"` | The same, when nothing does. |
+| `board.fullscreen` | `false` | Open the window fullscreen. |
 | `theme.from` | `"waybar"` | `"waybar"` or `"none"`. |
 | `theme.font` | the bar's | Font family for the window and charts. |
 | `theme.accent` | the bar's | The accent color. |
@@ -446,7 +469,8 @@ closes it. Under a compositor without layer-shell it opens as a plain window.
 and `lanes` also take `--demo`. A failed command prints one line to stderr
 and exits 1.
 
-`waybill-board` takes `--demo`, `--card <uuid>` and `--drawer`, and for
+`waybill-board` takes `--demo`, `--card <uuid>`, `--fullscreen`, `--windowed`
+and `--drawer`, and for
 screenshots `--snapshot <file>`, `--shot <png>`, `--tab <view>`,
 `--open <title text>`, `--do <words>` (type on the `/` line and press Enter)
 and `--size <w>x<h>`. `--shot` draws every chart fully grown, forces the

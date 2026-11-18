@@ -29,6 +29,11 @@ projects = []                           # known projects; empty allows any
 format = "● {holding}"
 format_calm = "●"
 
+[board]
+# Open the window fullscreen, over the bar. Leave it off to let the
+# compositor size it (alone on a workspace, it fills the workspace).
+fullscreen = false
+
 [theme]
 # "waybar" borrows the bar's colors and font from ~/.config/waybar/style.css.
 # "none" keeps the built-in theme.

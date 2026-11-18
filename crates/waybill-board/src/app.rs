@@ -22,9 +22,11 @@ const HELP: &str = "\
 waybill-board: the Waybill window
 
 Usage:
-  waybill-board                 Open the board on your task list
+  waybill-board                 Open the board on your task list, or bring
+                                the one already open forward
   waybill-board --demo          Open it on a made-up studio's list
   waybill-board --card <uuid>   Open it with one card showing
+  waybill-board --fullscreen    Open it fullscreen (--windowed overrides the config)
   waybill-board --drawer        Run the Desk drawer (`waybill toggle` starts it)
 
 For screenshots and checking a layout without a desktop:
@@ -167,6 +169,89 @@ fn loader(
     }
 }
 
+/// The application id, which compositors see as the window's class.
+pub const APP_ID: &str = "io.github.nathanielinman.Waybill";
+
+fn board_socket() -> PathBuf {
+    waybill_core::paths::runtime_dir().join("board.sock")
+}
+
+/// Hands this launch to a board that is already running: it comes forward,
+/// on `card` when one was asked for. False when no board answers.
+fn hand_off(card: Option<&str>) -> bool {
+    use std::io::Write;
+    let Ok(mut s) = std::os::unix::net::UnixStream::connect(board_socket()) else {
+        return false;
+    };
+    writeln!(s, "{}", serde_json::json!({ "present": { "card": card } })).is_ok()
+}
+
+/// Listens for later launches. One board holds the socket; a stale file
+/// left by a crash is replaced.
+fn listen(tx: async_channel::Sender<Msg>) {
+    use std::io::{BufRead, BufReader};
+    let path = board_socket();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::remove_file(&path);
+    let Ok(listener) = std::os::unix::net::UnixListener::bind(&path) else {
+        return;
+    };
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let mut line = String::new();
+            if BufReader::new(stream).read_line(&mut line).is_err() {
+                continue;
+            }
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+            if let Some(present) = value.get("present") {
+                let card = present
+                    .get("card")
+                    .and_then(|c| c.as_str())
+                    .map(String::from);
+                if tx.send_blocking(Msg::Present(card)).is_err() {
+                    return;
+                }
+            }
+        }
+    });
+}
+
+/// Asks the compositor to bring the board forward, wherever it is. A
+/// window cannot do this for itself on Wayland; without a compositor we
+/// know how to ask, it stays where it is and shows as wanting attention.
+pub fn raise() {
+    let run = |program: &str, args: &[&str]| {
+        std::process::Command::new(program)
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    };
+    match bar_anchor::compositor() {
+        Some("Hyprland") => {
+            // Hyprland with a Lua config takes a dispatcher expression;
+            // older ones take the dispatcher's name.
+            let lua = format!("hl.dsp.focus({{ window = \"class:{APP_ID}\" }})");
+            if run("hyprctl", &["dispatch", &lua]).contains("error") {
+                run(
+                    "hyprctl",
+                    &["dispatch", "focuswindow", &format!("class:{APP_ID}")],
+                );
+            }
+        }
+        Some("sway") => {
+            run("swaymsg", &[&format!("[app_id=\"{APP_ID}\"]"), "focus"]);
+        }
+        _ => {}
+    }
+}
+
 fn arg(args: &[String], name: &str) -> Option<String> {
     args.iter()
         .position(|a| a == name)
@@ -183,8 +268,18 @@ pub fn main() -> glib::ExitCode {
         println!("{HELP}");
         return glib::ExitCode::SUCCESS;
     }
+    // The board on the real list is one window. A second launch hands
+    // itself to the first, which is how the drawer and the bar reach a
+    // board that lives on its own workspace. The demo, a saved snapshot, a
+    // screenshot and the drawer are their own processes.
+    let resident = !["--demo", "--snapshot", "--shot", "--drawer"]
+        .iter()
+        .any(|flag| args.iter().any(|a| a == flag));
+    if resident && hand_off(arg(&args, "--card").as_deref()) {
+        return glib::ExitCode::SUCCESS;
+    }
     let app = gtk::Application::builder()
-        .application_id("io.github.nathanielinman.Waybill")
+        .application_id(APP_ID)
         // A second window (a demo beside the real one) is its own process.
         .flags(gio::ApplicationFlags::NON_UNIQUE)
         .build();
@@ -256,6 +351,14 @@ pub fn main() -> glib::ExitCode {
             ))
         } else {
             let shell = Shell::new(app, tx.clone(), world, wake.clone(), size);
+            if resident {
+                listen(tx.clone());
+            }
+            let fullscreen = !args.iter().any(|a| a == "--windowed")
+                && (cfg.board.fullscreen || args.iter().any(|a| a == "--fullscreen"));
+            if fullscreen && shot.is_none() {
+                shell.window.fullscreen();
+            }
             if let Some(tab) = arg(&args, "--tab").as_deref().and_then(Tab::parse) {
                 shell.set_tab(tab);
             }

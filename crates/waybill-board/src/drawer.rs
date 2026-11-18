@@ -229,7 +229,7 @@ impl Drawer {
                 self.render();
             }
             Msg::Close => self.hide("asked to"),
-            Msg::Reopen | Msg::New(_) => {}
+            Msg::Reopen | Msg::New(_) | Msg::Present(_) => {}
         }
     }
 
