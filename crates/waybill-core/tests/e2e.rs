@@ -294,5 +294,29 @@ fn an_agent_and_a_person_work_a_list() {
             .starts_with("edited: title")
     );
 
+    // A note: looking writes nothing, set heads it with the title, append adds.
+    use waybill_core::agent::NoteEdit;
+    let looked = agent::note(&desk, &build[..8], NoteEdit::Look, now).unwrap();
+    assert!(!looked.exists && looked.changed.is_none());
+    assert!(looked.path.ends_with(&format!("{build}.md")));
+    assert!(agent::note(&desk, &build[..8], NoteEdit::Append("  "), now).is_err());
+    agent::note(&desk, &build[..8], NoteEdit::Append("Context first."), now).unwrap();
+    let set = agent::note(&desk, &build, NoteEdit::Set("Print the receipt."), now).unwrap();
+    assert_eq!(set.changed, Some("set"));
+    let appended = agent::note(
+        &desk,
+        &build[..8],
+        NoteEdit::Append("## Found\n\nThe printer."),
+        now,
+    )
+    .unwrap();
+    assert_eq!(
+        appended.text.as_deref(),
+        Some(
+            "# Build the receipt: +bug project:x status:deleted\n\nPrint the receipt.\n\n## Found\n\nThe printer.\n"
+        )
+    );
+    assert!(desk.snapshot(now).unwrap().card(&build).unwrap().has_note);
+
     let _ = std::fs::remove_dir_all(&dir);
 }

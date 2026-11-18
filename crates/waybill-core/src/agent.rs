@@ -420,6 +420,72 @@ pub fn edit(
     })
 }
 
+/// What `note` did to a task's note.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Noted {
+    pub task: Named,
+    pub path: String,
+    /// Whether the note file exists now.
+    pub exists: bool,
+    /// `set`, `appended`, or none when only looking.
+    pub changed: Option<&'static str>,
+    /// The note's text, when it exists.
+    pub text: Option<String>,
+}
+
+/// How a note should change.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NoteEdit<'a> {
+    Look,
+    Set(&'a str),
+    Append(&'a str),
+}
+
+/// Looks at, replaces or adds to a task's note. A note that does not open
+/// with a heading gets the card title as one, as `add` does.
+pub fn note(desk: &Desk, id: &str, edit: NoteEdit, now: i64) -> anyhow::Result<Noted> {
+    let dir = desk.notes.as_ref().context("there is no notes folder")?;
+    let snap = desk.snapshot(now)?;
+    let card = resolve(&snap, id)?;
+    let headed = |text: &str| {
+        if text.trim_start().starts_with('#') {
+            text.to_string()
+        } else {
+            format!("# {}\n\n{}", card.title, text.trim_start())
+        }
+    };
+    let changed = match edit {
+        NoteEdit::Look => None,
+        NoteEdit::Set(t) | NoteEdit::Append(t) if t.trim().is_empty() => {
+            bail!("a note needs some words")
+        }
+        NoteEdit::Set(t) => {
+            act::write_note(dir, &card.uuid, &headed(t))?;
+            Some("set")
+        }
+        NoteEdit::Append(t) => {
+            match act::read_note(dir, &card.uuid).filter(|n| !n.trim().is_empty()) {
+                Some(_) => act::append_note(dir, &card.uuid, t)?,
+                None => act::write_note(dir, &card.uuid, &headed(t))?,
+            }
+            Some("appended")
+        }
+    };
+    if changed.is_some() {
+        claim::touch(&card.uuid, now);
+    }
+    let text = act::read_note(dir, &card.uuid);
+    Ok(Noted {
+        task: Named::from(card),
+        path: act::note_path(dir, &card.uuid)
+            .to_string_lossy()
+            .into_owned(),
+        exists: text.is_some(),
+        changed,
+        text,
+    })
+}
+
 /// Finishes a task, with an optional closing line, and says what that freed.
 pub fn done(desk: &Desk, id: &str, text: Option<&str>, now: i64) -> anyhow::Result<Closed> {
     let snap = desk.snapshot(now)?;
