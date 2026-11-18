@@ -1,0 +1,250 @@
+/* Waybill's stylesheet. The @wb_* colors come from the palette (built-in, or
+   the bar's own with theme.from = "waybar") and are defined just above this
+   text when it loads. Override anything in ~/.config/waybill/style.css. */
+
+/* The font is set with the colors, from the palette. */
+window.waybill {
+  background: @wb_panel;
+  color: @wb_fg;
+  font-size: 13px;
+}
+window.waybill * { font-family: inherit; }
+/* The page paints the background too, so a screenshot of it is whole. */
+.page { background: @wb_panel; }
+
+.num { font-feature-settings: "tnum"; }
+.dim { color: @wb_dim; }
+.bright { color: @wb_bright; }
+.small { font-size: 11.5px; }
+.accent { color: @wb_accent; }
+.ok { color: @wb_ok; }
+.warn { color: @wb_warn; }
+.bad { color: @wb_bad; }
+.violet { color: @wb_violet; }
+.plain { color: @wb_dim; }
+.done { color: @wb_dim; }
+
+tooltip {
+  background: @wb_well;
+  color: @wb_fg;
+  border: 1px solid @wb_border;
+  border-radius: 8px;
+}
+
+scrollbar { background: transparent; border: none; }
+scrollbar slider {
+  background: alpha(@wb_fg, 0.16);
+  border-radius: 999px;
+  min-width: 5px;
+  min-height: 5px;
+}
+scrollbar slider:hover { background: alpha(@wb_fg, 0.3); }
+undershoot, overshoot { background: none; }
+
+/* ---- header ---- */
+.header { padding: 12px 18px 10px 18px; }
+.brand { font-weight: bold; letter-spacing: 3px; color: @wb_bright; }
+.brand-lamp { font-size: 15px; }
+.lamp { font-size: 11px; }
+.lamp.live { animation: beat 1.1s ease-in-out infinite alternate; }
+@keyframes beat { from { opacity: 1; } to { opacity: 0.3; } }
+
+.tabs {
+  background: @wb_well;
+  border-radius: 11px;
+  padding: 3px;
+}
+.tabs button {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  outline: none;
+  color: @wb_dim;
+  padding: 5px 14px;
+  border-radius: 8px;
+  min-height: 0;
+  font-weight: bold;
+  transition: background-color 180ms, color 180ms;
+}
+.tabs button:hover { color: @wb_bright; background: alpha(@wb_fg, 0.06); }
+.tabs button.active { background: @wb_accent; color: @wb_well; }
+.tabs button:focus-visible { box-shadow: 0 0 0 2px alpha(@wb_accent, 0.6); }
+.key {
+  font-size: 10.5px;
+  font-weight: bold;
+  color: @wb_dim;
+  background: alpha(@wb_fg, 0.08);
+  border-radius: 5px;
+  padding: 0 5px;
+}
+.tabs button.active .key { color: @wb_well; background: alpha(@wb_well, 0.18); }
+
+.notice {
+  margin: 0 18px 10px 18px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: @wb_bright;
+  background: alpha(@wb_bad, 0.14);
+  border: 1px solid alpha(@wb_bad, 0.45);
+}
+
+.middle { padding: 0 18px; }
+
+.footer {
+  padding: 9px 18px 11px 18px;
+  color: @wb_dim;
+}
+.question { color: @wb_fg; }
+
+/* ---- shared pieces ---- */
+.tile {
+  background: @wb_tile;
+  border: 1px solid @wb_border;
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.tile-title { font-weight: bold; color: @wb_bright; }
+.section {
+  color: @wb_dim;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  margin-top: 10px;
+  margin-bottom: 2px;
+}
+.empty { color: @wb_dim; padding: 14px 4px; }
+
+.chip {
+  font-size: 11px;
+  font-weight: bold;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: @wb_dim;
+  background: alpha(@wb_fg, 0.07);
+}
+.chip.accent { color: @wb_accent; background: alpha(@wb_accent, 0.14); }
+.chip.ok { color: @wb_ok; background: alpha(@wb_ok, 0.14); }
+.chip.warn { color: @wb_warn; background: alpha(@wb_warn, 0.15); }
+.chip.bad { color: @wb_bad; background: alpha(@wb_bad, 0.18); }
+.chip.violet { color: @wb_violet; background: alpha(@wb_violet, 0.17); }
+.chip.sha {
+  color: @wb_accent;
+  background: alpha(@wb_accent, 0.09);
+  border-radius: 5px;
+  font-weight: normal;
+}
+.chip.pri-h { color: @wb_bad; background: alpha(@wb_bad, 0.18); }
+.chip.pri-m { color: @wb_fg; }
+.chip.pri-l { color: @wb_dim; background: transparent; box-shadow: inset 0 0 0 1px alpha(@wb_fg, 0.12); }
+.project { color: @wb_dim; font-size: 12px; }
+
+button.row, button.card, button.ghost {
+  background-image: none;
+  box-shadow: none;
+  outline: none;
+  min-height: 0;
+  font-weight: normal;
+  color: @wb_fg;
+}
+button.row:focus-visible, button.card:focus-visible, button.ghost:focus-visible {
+  box-shadow: 0 0 0 2px alpha(@wb_accent, 0.6);
+}
+button.ghost {
+  background: transparent;
+  border: 1px solid @wb_border;
+  border-radius: 8px;
+  padding: 2px 10px;
+  color: @wb_dim;
+  font-size: 11.5px;
+}
+button.ghost:hover { color: @wb_bright; background: alpha(@wb_fg, 0.06); }
+
+button.row {
+  background: @wb_tile;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  padding: 10px 14px;
+  transition: background-color 160ms, border-color 160ms;
+}
+button.row:hover { background: @wb_tile_hover; border-color: @wb_border; }
+button.row.slim { padding: 5px 10px; border-radius: 8px; }
+.row-title { color: @wb_bright; }
+.said { color: @wb_fg; }
+
+/* ---- board ---- */
+.board { padding-bottom: 2px; }
+.lane {
+  background: @wb_well;
+  border-radius: 16px;
+  padding: 12px 10px 4px 10px;
+}
+.lane-head { padding: 0 4px; }
+.lane-title { font-weight: bold; color: @wb_bright; }
+.lane-count { color: @wb_dim; font-weight: bold; }
+.lane-list { padding: 2px 0 10px 0; }
+.sub-head { padding: 12px 4px 0 4px; font-size: 11.5px; }
+
+button.card {
+  background: @wb_tile;
+  border: 1px solid @wb_border;
+  border-radius: 12px;
+  padding: 10px 12px;
+  transition: background-color 160ms, border-color 160ms, box-shadow 160ms;
+}
+button.card:hover {
+  background: @wb_tile_hover;
+  border-color: alpha(@wb_accent, 0.55);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+}
+button.card.yours { border-color: alpha(@wb_warn, 0.34); }
+button.card.yours:hover { border-color: alpha(@wb_warn, 0.75); }
+button.card.doing { border-color: alpha(@wb_ok, 0.4); background: mix(@wb_tile, @wb_ok, 0.045); }
+button.card.parked { opacity: 0.62; }
+.card-title { color: @wb_bright; font-size: 13.5px; }
+
+/* ---- desk ---- */
+.headline { font-size: 25px; font-weight: bold; color: @wb_bright; padding: 4px 2px; }
+.big { font-size: 25px; font-weight: bold; }
+.glyph { font-size: 17px; }
+.fact { font-size: 27px; font-weight: bold; color: @wb_bright; }
+
+/* ---- lines ---- */
+.line-name { font-size: 16px; font-weight: bold; color: @wb_bright; }
+flowbox.line-flow { padding: 0; }
+flowboxchild { padding: 0; border-radius: 14px; outline: none; background: none; }
+.key { }
+.lines .key { padding: 2px 6px 14px 6px; }
+
+/* ---- log ---- */
+.time { min-width: 44px; }
+.mark { min-width: 14px; }
+button.row.log-row { background: transparent; padding: 7px 10px; }
+button.row.log-row:hover { background: @wb_tile; }
+
+/* ---- pulse ---- */
+.stat { font-size: 34px; font-weight: bold; color: @wb_bright; }
+.project-row { padding: 4px 0; }
+
+/* ---- card pane ---- */
+.detail {
+  background: @wb_well;
+  border: 1px solid @wb_border;
+  border-radius: 16px;
+  margin: 0 0 2px 40px;
+  padding: 16px 16px 6px 16px;
+  box-shadow: -18px 0 36px rgba(0, 0, 0, 0.45);
+}
+.detail-title { font-size: 19px; font-weight: bold; color: @wb_bright; }
+.mono { color: @wb_bright; }
+.note { padding: 2px 0; }
+.note-head { font-weight: bold; color: @wb_bright; margin-top: 6px; }
+.note-text { color: @wb_fg; }
+.code {
+  background: alpha(#000000, 0.28);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: @wb_fg;
+  font-size: 12px;
+}
+.visits { border-left: 2px solid @wb_border; margin-left: 4px; }
+.visit { padding: 6px 0 8px 12px; }

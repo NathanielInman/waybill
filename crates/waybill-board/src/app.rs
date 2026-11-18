@@ -1,0 +1,284 @@
+//! Startup: styles, the thread that reads the task list, and the file
+//! watches that reread it when the database changes and restyle the board
+//! when the bar's stylesheet or Waybill's config does.
+
+use crate::shell::{Msg, Notes, Shell};
+use crate::theme::Palette;
+use crate::views::Tab;
+use gtk::prelude::*;
+use gtk::{gdk, gio, glib};
+use std::cell::RefCell;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, mpsc};
+use std::time::Duration;
+use waybill_core::clock::{self, Zone};
+use waybill_core::config::Config;
+use waybill_core::model::Snapshot;
+
+const DEFAULT_CSS: &str = include_str!("style.css");
+
+const HELP: &str = "\
+waybill-board: the Waybill window
+
+Usage:
+  waybill-board                 Open the board on your task list
+  waybill-board --demo          Open it on a made-up studio's list
+
+For screenshots and checking a layout without a desktop:
+  --snapshot <file.json>        Draw a snapshot saved by `waybill snapshot`
+  --shot <out.png>              Draw one frame into a PNG and exit
+  --tab <board|desk|lines|log|pulse>
+  --open <text>                 Open the first card whose title has <text>
+  --size <width>x<height>";
+
+thread_local! {
+    static THEME: RefCell<Option<gtk::CssProvider>> = const { RefCell::new(None) };
+    static USER: RefCell<Option<gtk::CssProvider>> = const { RefCell::new(None) };
+    static WATCHES: RefCell<Vec<gio::FileMonitor>> = const { RefCell::new(Vec::new()) };
+}
+
+fn provider(
+    slot: &'static std::thread::LocalKey<RefCell<Option<gtk::CssProvider>>>,
+    priority: u32,
+) -> Option<gtk::CssProvider> {
+    let display = gdk::Display::default()?;
+    Some(slot.with(|s| {
+        s.borrow_mut()
+            .get_or_insert_with(|| {
+                let p = gtk::CssProvider::new();
+                gtk::style_context_add_provider_for_display(&display, &p, priority);
+                p
+            })
+            .clone()
+    }))
+}
+
+/// Builds the palette (built-in, then the bar's look) and loads it with the
+/// stylesheet, then the user's own stylesheet over both.
+pub fn apply_styles() {
+    let (cfg, _) = Config::load();
+    let bar = waybill_core::waybar::load_theme();
+    let palette = Palette::from(bar.as_ref(), &cfg);
+    if let Some(p) = provider(&THEME, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION) {
+        p.load_from_string(&format!("{}{DEFAULT_CSS}", palette.css()));
+    }
+    crate::theme::set_current(palette);
+    if let Some(p) = provider(&USER, gtk::STYLE_PROVIDER_PRIORITY_USER) {
+        let user = std::fs::read_to_string(waybill_core::paths::style_file()).unwrap_or_default();
+        p.load_from_string(&user);
+    }
+}
+
+fn watch(path: PathBuf, folder: bool, on_change: impl Fn() + 'static) {
+    let file = gio::File::for_path(&path);
+    let monitor = if folder {
+        file.monitor_directory(gio::FileMonitorFlags::NONE, gio::Cancellable::NONE)
+    } else {
+        file.monitor_file(gio::FileMonitorFlags::NONE, gio::Cancellable::NONE)
+    };
+    if let Ok(m) = monitor {
+        m.connect_changed(move |_, _, _, ev| {
+            if matches!(
+                ev,
+                gio::FileMonitorEvent::ChangesDoneHint
+                    | gio::FileMonitorEvent::Created
+                    | gio::FileMonitorEvent::Deleted
+            ) {
+                on_change();
+            }
+        });
+        WATCHES.with(|w| w.borrow_mut().push(m));
+    }
+}
+
+/// Where the board's tasks come from.
+enum Source {
+    Live(Config),
+    Demo,
+    File(PathBuf),
+}
+
+fn millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+/// Reads the task list, sends it, then waits for a change (or a minute, so
+/// "held 12 min" keeps counting). Reading the database can touch its files,
+/// so changes seen until `quiet` are our own and are ignored.
+fn loader(
+    source: Source,
+    notes: Option<PathBuf>,
+    tx: async_channel::Sender<Msg>,
+    wake: mpsc::Receiver<()>,
+    quiet: Arc<AtomicI64>,
+) {
+    loop {
+        quiet.store(millis() + 10_000, Ordering::Relaxed);
+        let now = clock::now();
+        let snap = match &source {
+            Source::Live(cfg) => {
+                waybill_core::load::snapshot(cfg, notes.as_deref(), now, Zone::Local)
+            }
+            Source::Demo => waybill_core::demo::snapshot(now, Zone::Local),
+            Source::File(path) => std::fs::read_to_string(path)
+                .map_err(|e| e.to_string())
+                .and_then(|t| serde_json::from_str::<Snapshot>(&t).map_err(|e| e.to_string()))
+                .unwrap_or_else(|e| {
+                    Snapshot::failed(now, Zone::Local, format!("{}: {e}", path.display()))
+                }),
+        };
+        quiet.store(millis() + 1_500, Ordering::Relaxed);
+        if std::env::var_os("WAYBILL_TRACE").is_some() {
+            eprintln!(
+                "waybill-board: read {} cards, {} log lines at {}",
+                snap.cards.len(),
+                snap.log.len(),
+                clock::hm(now + snap.offset)
+            );
+        }
+        if tx.send_blocking(Msg::Snapshot(Box::new(snap))).is_err() {
+            return;
+        }
+        if matches!(source, Source::File(_)) {
+            return;
+        }
+        match wake.recv_timeout(Duration::from_secs(60)) {
+            Ok(()) => {
+                // Let a burst of writes finish, then read once.
+                std::thread::sleep(Duration::from_millis(350));
+                while wake.try_recv().is_ok() {}
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => return,
+        }
+    }
+}
+
+fn arg(args: &[String], name: &str) -> Option<String> {
+    args.iter()
+        .position(|a| a == name)
+        .and_then(|i| args.get(i + 1).cloned())
+}
+
+pub fn main() -> glib::ExitCode {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("waybill-board {}", env!("CARGO_PKG_VERSION"));
+        return glib::ExitCode::SUCCESS;
+    }
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!("{HELP}");
+        return glib::ExitCode::SUCCESS;
+    }
+    let app = gtk::Application::builder()
+        .application_id("io.github.nathanielinman.Waybill")
+        // A second window (a demo beside the real one) is its own process.
+        .flags(gio::ApplicationFlags::NON_UNIQUE)
+        .build();
+    let built = std::rc::Rc::new(std::cell::Cell::new(false));
+    app.connect_activate(move |app| {
+        if built.replace(true) {
+            return;
+        }
+        let shot = arg(&args, "--shot");
+        if shot.is_some() {
+            crate::charts::STILL.store(true, Ordering::Relaxed);
+        }
+        apply_styles();
+        let (cfg, problem) = Config::load();
+        if let Some(p) = problem {
+            eprintln!("waybill-board: config ignored: {p}");
+        }
+        let (source, notes, data) = if args.iter().any(|a| a == "--demo") {
+            (Source::Demo, None, None)
+        } else if let Some(file) = arg(&args, "--snapshot") {
+            (
+                Source::File(PathBuf::from(file)),
+                waybill_core::load::notes_dir(&cfg),
+                None,
+            )
+        } else {
+            let data = waybill_core::load::data_dir(&cfg);
+            (
+                Source::Live(cfg.clone()),
+                waybill_core::load::notes_dir(&cfg),
+                data,
+            )
+        };
+        let size = arg(&args, "--size")
+            .and_then(|s| {
+                let (w, h) = s.split_once('x')?;
+                Some((w.parse().ok()?, h.parse().ok()?))
+            })
+            .unwrap_or((1560, 960));
+
+        let (tx, rx) = async_channel::unbounded::<Msg>();
+        let shell = Shell::new(
+            app,
+            tx.clone(),
+            match source {
+                Source::Demo => Notes::Demo,
+                _ => Notes::Dir(notes.clone()),
+            },
+            size,
+        );
+        if let Some(tab) = arg(&args, "--tab").as_deref().and_then(Tab::parse) {
+            shell.set_tab(tab);
+        }
+
+        let (wake, woken) = mpsc::channel::<()>();
+        let quiet = Arc::new(AtomicI64::new(0));
+        if shot.is_none() {
+            // The database and the notes beside it.
+            for dir in data.into_iter().chain(notes.clone()) {
+                let (wake, quiet) = (wake.clone(), quiet.clone());
+                watch(dir, true, move || {
+                    if millis() > quiet.load(Ordering::Relaxed) {
+                        let _ = wake.send(());
+                    }
+                });
+            }
+            for path in [
+                waybill_core::waybar::style_path(),
+                waybill_core::paths::style_file(),
+                waybill_core::paths::config_file(),
+            ] {
+                let tx = tx.clone();
+                watch(path, false, move || {
+                    let _ = tx.send_blocking(Msg::Restyle);
+                });
+            }
+        }
+        let loader_tx = tx.clone();
+        std::thread::spawn(move || {
+            // Held so the channel stays open for as long as the loader runs.
+            let _wake = wake;
+            loader(source, notes, loader_tx, woken, quiet)
+        });
+
+        let open = arg(&args, "--open");
+        let app = app.clone();
+        shell.window.present();
+        glib::spawn_future_local(async move {
+            let mut first = true;
+            while let Ok(msg) = rx.recv().await {
+                let is_snapshot = matches!(msg, Msg::Snapshot(_));
+                shell.handle(msg);
+                if first && is_snapshot {
+                    first = false;
+                    if let Some(text) = &open {
+                        shell.open_titled(text);
+                    }
+                    if let Some(out) = shot.clone() {
+                        shell.shoot(out, size, app.clone());
+                    }
+                }
+            }
+        });
+    });
+    app.run_with_args::<&str>(&[])
+}
