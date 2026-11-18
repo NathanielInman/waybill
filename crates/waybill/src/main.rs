@@ -27,7 +27,9 @@ Working a task (add --json to any of these for JSON):
 
 Changing the list:
   waybill add [--project P] [--priority H|M|L] [--tag T]... [--ref R]
-              [--after ID]... [--note TEXT | --note-file F] -- TITLE
+              [--after ID]... [--note TEXT | --note-file F] [--force] -- TITLE
+                                        Add a task; refuses what lint would flag
+                                        unless --force
   waybill ask [ID] [--project P] [--priority P] --option O... [--context TEXT] [-- TITLE]
                                         File a decision for the user, with its options
   waybill rule ID TEXT...               Record the user's ruling on a decision
@@ -302,28 +304,22 @@ fn run() -> anyhow::Result<()> {
         "add" => {
             let desk = desk();
             let title = a.words.join(" ");
-            let problems = waybill_core::lint::title(&title, desk.cfg.lint.title);
-            if !problems.is_empty() && !a.has("--force") {
-                let all: Vec<String> = problems.into_iter().map(|p| p.1).collect();
-                bail!("{}; pass --force to add it anyway", all.join("; "));
-            }
             let snap = desk.snapshot(now)?;
             let after = a
                 .all("--after")
                 .iter()
                 .map(|id| agent::resolve(&snap, id).map(|c| c.uuid.clone()))
                 .collect::<anyhow::Result<Vec<_>>>()?;
-            let uuid = act::add(
-                &desk.cfg,
-                &NewTask {
-                    title: title.clone(),
-                    project: a.one("--project").map(String::from),
-                    priority: priority(&a)?.or(Some('M')),
-                    tags: a.all("--tag"),
-                    reference: a.one("--ref").map(String::from),
-                    after,
-                },
-            )?;
+            let new = NewTask {
+                title: title.clone(),
+                project: a.one("--project").map(String::from),
+                priority: priority(&a)?.or(Some('M')),
+                tags: a.all("--tag"),
+                reference: a.one("--ref").map(String::from),
+                after,
+            };
+            house_rules(&new, &desk.cfg, a.has("--force"))?;
+            let uuid = act::add(&desk.cfg, &new)?;
             let note = match (a.one("--note"), a.one("--note-file")) {
                 (Some(text), _) => Some(text.to_string()),
                 (None, Some(file)) => Some(
@@ -382,18 +378,15 @@ fn run() -> anyhow::Result<()> {
                     if title.trim().is_empty() {
                         bail!("give the decision a title after --, or name an existing task");
                     }
-                    agent::ask_new(
-                        &desk,
-                        NewTask {
-                            title,
-                            project: a.one("--project").map(String::from),
-                            priority: priority(&a)?.or(Some('M')),
-                            tags: a.all("--tag"),
-                            ..Default::default()
-                        },
-                        &options,
-                        a.one("--context"),
-                    )?
+                    let new = NewTask {
+                        title,
+                        project: a.one("--project").map(String::from),
+                        priority: priority(&a)?.or(Some('M')),
+                        tags: a.all("--tag"),
+                        ..Default::default()
+                    };
+                    house_rules(&new, &desk.cfg, a.has("--force"))?;
+                    agent::ask_new(&desk, new, &options, a.one("--context"))?
                 }
             };
             print(json, &asked, || {
@@ -486,6 +479,21 @@ fn run() -> anyhow::Result<()> {
         }
         other => bail!("unknown command {other:?}; try waybill --help"),
     }
+}
+
+/// Refuses a task that breaks the house rules `waybill lint` checks, so a
+/// bad card never reaches the list. `--force` files it anyway.
+fn house_rules(
+    new: &NewTask,
+    cfg: &waybill_core::config::Config,
+    force: bool,
+) -> anyhow::Result<()> {
+    let problems = waybill_core::lint::new_task(new, cfg);
+    if problems.is_empty() || force {
+        return Ok(());
+    }
+    let all: Vec<String> = problems.into_iter().map(|p| p.1).collect();
+    bail!("{}; pass --force to add it anyway", all.join("; "))
 }
 
 fn main() {

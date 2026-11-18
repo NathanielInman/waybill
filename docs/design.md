@@ -398,8 +398,9 @@ A ruling (`waybill rule`, an option button, or `o` in the card pane):
 characters), `title-period`, `tag-unknown` (not a hands tag, the decision
 tag or one of `lint.tags`), `no-project`, `project-unknown` (when
 `lint.projects` is set; a dotted project passes if its family is listed) and
-`no-priority`. `waybill add` refuses a title that fails the title rules
-unless `--force` is given.
+`no-priority`. `waybill add` and `waybill ask` hold a new task to the same
+rules (`lint::new_task`) and refuse it unless `--force` is given. The board's
+own add form does not: the person typing there decides.
 
 ## Acting from the board
 

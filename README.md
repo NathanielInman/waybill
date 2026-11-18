@@ -142,6 +142,8 @@ waybill ask --project etb --option "Keep 4 s" --option "Lower it to 2 s" \
 task with its note in one command, `waybill show` prints a task in full,
 `waybill lint` lists open tasks that break the house rules (a title over 50
 characters, an unknown tag, no project), and `waybill --help` has the rest.
+`add` and `ask` refuse a new task that lint would flag, so a bad card never
+reaches the list; `--force` files it anyway.
 
 A task is named by its uuid or the first 8 characters of it. Waybill never
 uses Taskwarrior's numbers, which change whenever a task closes.
