@@ -1,0 +1,38 @@
+# Maintainer: Nathaniel Inman
+pkgname=waybill
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="A board for Taskwarrior on a desk where agents do the building"
+arch=('x86_64' 'aarch64')
+url="https://github.com/NathanielInman/waybill"
+license=('MIT')
+depends=('gtk4' 'gtk4-layer-shell' 'task')
+makedepends=('cargo' 'git')
+source=("git+$url.git#tag=v$pkgver")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "$pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "$pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo build --frozen --release
+}
+
+check() {
+  cd "$pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo test --frozen --workspace
+}
+
+package() {
+  cd "$pkgname"
+  install -Dm755 target/release/waybill target/release/waybill-board -t "$pkgdir/usr/bin"
+  install -Dm644 packaging/io.github.nathanielinman.Waybill.desktop -t "$pkgdir/usr/share/applications"
+  install -Dm644 packaging/examples/config.toml -t "$pkgdir/usr/share/doc/$pkgname/examples"
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+}
