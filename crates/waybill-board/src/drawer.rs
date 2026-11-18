@@ -157,7 +157,7 @@ impl Drawer {
         let w = Rc::downgrade(&d);
         d.stage.connect_outside(move || {
             if let Some(d) = w.upgrade() {
-                d.hide();
+                d.hide("a click outside");
             }
         });
         let s = d.spring.clone();
@@ -166,7 +166,7 @@ impl Drawer {
         board.connect_clicked(move |_| {
             open_board(None);
             if let Some(d) = w.upgrade() {
-                d.hide();
+                d.hide("the board was opened");
             }
         });
         let keys = gtk::EventControllerKey::new();
@@ -175,7 +175,7 @@ impl Drawer {
             if key == gdk::Key::Escape
                 && let Some(d) = w.upgrade()
             {
-                d.hide();
+                d.hide("Esc");
                 return glib::Propagation::Stop;
             }
             glib::Propagation::Proceed
@@ -201,14 +201,14 @@ impl Drawer {
                     );
                 }
                 if self.visible.get() {
-                    self.hide();
+                    self.hide("a toggle");
                 } else {
                     self.show(anchor);
                 }
             }
             Msg::Open(uuid) => {
                 open_board(Some(&uuid));
-                self.hide();
+                self.hide("a card was opened");
             }
             Msg::Do(action) => self.act(action),
             Msg::Did(result) => {
@@ -228,7 +228,7 @@ impl Drawer {
                 crate::app::apply_styles();
                 self.render();
             }
-            Msg::Close => self.hide(),
+            Msg::Close => self.hide("asked to"),
             Msg::Reopen | Msg::New(_) => {}
         }
     }
@@ -395,9 +395,12 @@ impl Drawer {
         }
     }
 
-    fn hide(self: &Rc<Self>) {
+    fn hide(self: &Rc<Self>, why: &str) {
         if !self.visible.replace(false) {
             return;
+        }
+        if std::env::var_os("WAYBILL_TRACE").is_some() {
+            eprintln!("waybill-board: drawer closes ({why})");
         }
         let w = Rc::downgrade(self);
         self.spring.play_out(move || {
