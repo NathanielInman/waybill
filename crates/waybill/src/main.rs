@@ -24,6 +24,9 @@ Working a task (add --json to any of these for JSON):
   waybill done ID [TEXT...]             Finish it; prints what that freed
   waybill stop ID [WHY...]              Put it back, unfinished
   waybill show ID                       A task in full: note path, visits, ties
+  waybill find [--project P] [--all] WORDS...
+                                        Tasks whose title, ref, visits or note
+                                        hold every word; --all adds closed ones
 
 Changing the list:
   waybill add [--project P] [--priority H|M|L] [--tag T]... [--ref R]
@@ -269,6 +272,33 @@ fn run() -> anyhow::Result<()> {
             let snap = desk.snapshot(now)?;
             let b = desk.brief(&snap, agent::resolve(&snap, id)?);
             print(json, &b, || show_brief(&b))
+        }
+        "find" => {
+            let desk = desk();
+            if a.words.is_empty() {
+                bail!("find needs some words to look for");
+            }
+            let found = agent::find(&desk, &a.words, a.one("--project"), a.has("--all"), now)?;
+            print(json, &found, || {
+                if found.is_empty() {
+                    println!("Nothing matches");
+                }
+                for f in &found {
+                    let lane = match (f.status, f.lane) {
+                        ("done", _) => "done".to_string(),
+                        (_, Some(l)) => format!("{l:?}").to_lowercase(),
+                        _ => "open".to_string(),
+                    };
+                    println!(
+                        "{} {:<14} {:<7} {}",
+                        &f.uuid[..8.min(f.uuid.len())],
+                        f.project,
+                        lane,
+                        f.title
+                    );
+                    println!("         in {}", f.matched.join(", "));
+                }
+            })
         }
         "visit" => {
             let (id, text) = a.id_and_text("visit")?;

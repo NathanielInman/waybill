@@ -392,6 +392,14 @@ A ruling (`waybill rule`, an option button, or `o` in the card pane):
 3. removes the decision and hands tags, so the task returns to the Ready
    lane for an agent to act on.
 
+### Find
+
+`waybill find [--project P] [--all] WORDS...` searches before adding. Every
+word must appear, case aside, in the title, the ref, the project, a visit or
+the note; the result names where they turned up. Open tasks come first by
+urgency, then with `--all` finished ones, latest first. Deleted tasks never
+match. One export feeds the search and the lane each hit reports.
+
 ### Lint
 
 `waybill lint` checks every open task: `title-long` (over `lint.title`
