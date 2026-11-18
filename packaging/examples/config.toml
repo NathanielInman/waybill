@@ -1,0 +1,25 @@
+# ~/.config/waybill/config.toml. Every key is optional; these are the
+# defaults.
+
+[task]
+# The Taskwarrior command. It may carry arguments: "task rc:~/work.taskrc".
+command = "task"
+
+[notes]
+# Folder of <uuid>.md notes. Empty means notes/ under Taskwarrior's
+# data.location.
+dir = ""
+
+[tags]
+# Tags that mean "this needs a person's hands". Tasks with one land in
+# Needs you, and visits that open with the first one ("Me: ...") are rulings.
+hands = ["me"]
+# A task blocked on a choice. It lands in Needs you as well.
+decision = "decision"
+
+[theme]
+# "waybar" borrows the bar's colors and font from ~/.config/waybar/style.css.
+# "none" keeps the built-in theme.
+from = "waybar"
+# font = "JetBrains Mono"
+# accent = "#88c0d0"

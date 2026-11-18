@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Waybill
+Comment=A board for Taskwarrior
+Exec=waybill-board
+Icon=view-kanban-symbolic
+Categories=Office;ProjectManagement;
+StartupWMClass=io.github.nathanielinman.Waybill
