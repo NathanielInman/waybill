@@ -1,0 +1,15 @@
+[package]
+name = "waybill"
+description = "Waybill's command line: the task list as JSON for scripts and agents"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+waybill-core = { path = "../waybill-core" }
+serde_json.workspace = true
+anyhow.workspace = true
