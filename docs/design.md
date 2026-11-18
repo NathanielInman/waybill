@@ -402,6 +402,14 @@ logs a visit, "edited: priority H, +bug", and touches the claim. A title goes
 to Taskwarrior as one `description:` argument, so words like `+bug` or
 `project:x` in it stay words.
 
+### Note
+
+`waybill note ID` prints the note's path without creating it (`--json` adds
+the text). `--set TEXT` or `--set-file F` replaces the note and `--append
+TEXT` adds a section to its end. A note that does not open with a heading
+gets the card title as one, as `add` does. Writing touches the claim but logs
+no visit: the note is the state, visits are the history.
+
 ### Find
 
 `waybill find [--project P] [--all] WORDS...` searches before adding. Every

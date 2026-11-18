@@ -36,6 +36,8 @@ Changing the list:
   waybill edit ID [--priority H|M|L] [--tag T]... [--untag T]... [--project P]
               [--title TEXT] [--ref R] [--force]
                                         Change a task; refuses what lint would flag
+  waybill note ID [--set TEXT | --set-file F | --append TEXT]
+                                        Print a note's path, or replace or add to it
   waybill ask [ID] [--project P] [--priority P] --option O... [--context TEXT] [-- TITLE]
                                         File a decision for the user, with its options
   waybill rule ID TEXT...               Record the user's ruling on a decision
@@ -54,7 +56,10 @@ ID is a task's uuid or its first 8 characters. --demo reads a made-up list.
 The board itself is `waybill-board`.";
 
 /// Flags that take a value. Everything else starting with `--` is a switch.
-const VALUED: [&str; 11] = [
+const VALUED: [&str; 14] = [
+    "--set",
+    "--set-file",
+    "--append",
     "--untag",
     "--title",
     "--project",
@@ -360,6 +365,36 @@ fn run() -> anyhow::Result<()> {
             print(json, &e, || {
                 println!("Edited {} {}", &e.task.uuid[..8], e.task.title);
                 println!("  {}", e.changes.join(", "));
+            })
+        }
+        "note" => {
+            let (id, rest) = a.id_and_text("note")?;
+            if !rest.is_empty() {
+                bail!("note takes --set, --set-file or --append, not words");
+            }
+            let file = match a.one("--set-file") {
+                Some(f) => Some(
+                    std::fs::read_to_string(f).with_context(|| format!("could not read {f}"))?,
+                ),
+                None => None,
+            };
+            let edit = match (a.one("--set"), file.as_deref(), a.one("--append")) {
+                (None, None, None) => agent::NoteEdit::Look,
+                (Some(t), None, None) | (None, Some(t), None) => agent::NoteEdit::Set(t),
+                (None, None, Some(t)) => agent::NoteEdit::Append(t),
+                _ => bail!("give one of --set, --set-file or --append"),
+            };
+            let n = agent::note(&desk(), id, edit, now)?;
+            print(json, &n, || {
+                match n.changed {
+                    Some(how) => println!("Note {how} on {} {}", &n.task.uuid[..8], n.task.title),
+                    None => println!("{}", n.task.title),
+                }
+                println!(
+                    "  note  {}{}",
+                    n.path,
+                    if n.exists { "" } else { " (not written yet)" }
+                );
             })
         }
         "add" => {

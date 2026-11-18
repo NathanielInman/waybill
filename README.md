@@ -141,7 +141,8 @@ waybill ask --project etb --option "Keep 4 s" --option "Lower it to 2 s" \
 `waybill ask` files a decision for you with its options. `waybill add` adds a
 task with its note in one command, `waybill find` searches titles, visits and
 notes before you add, `waybill edit` changes a task's priority, tags, project,
-title or ref, `waybill show` prints a task in full,
+title or ref, `waybill note` prints, replaces or adds to a task's note,
+`waybill show` prints a task in full,
 `waybill lint` lists open tasks that break the house rules (a title over 50
 characters, an unknown tag, no project), and `waybill --help` has the rest.
 `add` and `ask` refuse a new task that lint would flag, so a bad card never
