@@ -1,5 +1,5 @@
 //! `waybill doctor`'s Taskwarrior checks against a real `task` binary and
-//! throwaway databases. Skipped when Taskwarrior is not installed.
+//! throwaway databases. Skipped without Taskwarrior 3.
 
 use std::path::Path;
 use waybill_core::config::Config;
@@ -30,12 +30,15 @@ fn status(checks: &[doctor::Check], what: &str) -> Status {
 
 #[test]
 fn taskwarrior_checks() {
-    if std::process::Command::new("task")
+    // CI's Ubuntu ships Taskwarrior 2, which the doctor rightly fails.
+    let major = std::process::Command::new("task")
         .arg("--version")
         .output()
-        .is_err()
-    {
-        eprintln!("skipped: no task binary");
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|v| v.trim().split('.').next()?.parse::<u32>().ok());
+    if major.is_none_or(|m| m < 3) {
+        eprintln!("skipped: no Taskwarrior 3 binary");
         return;
     }
     let root = std::env::temp_dir().join(format!("waybill-doctor-{}", std::process::id()));
