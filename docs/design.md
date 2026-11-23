@@ -214,7 +214,8 @@ what the current view is for and prints the keys.
 
 Clicking a card, a desk row, a log row or a stop opens the **card pane**,
 which slides over the right edge of the view so the view under it never
-reflows. `Esc` closes it. It shows the card's state, what it frees and
+reflows. `Esc` closes it, after leaving any field in it (a note being
+edited, the new-task form), and with no card open closes the board. It shows the card's state, what it frees and
 waits on (each a button to that card), the note and the visits.
 
 The note is laid out by `note.rs`, which reads headings, paragraphs,

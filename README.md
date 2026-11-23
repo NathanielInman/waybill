@@ -117,10 +117,14 @@ Open a card and the pane shows what you can do, each button with its key:
 | `e` | Edit the note |
 | `a` `b` `c` | On a decision: choose that option. `o` writes your own ruling |
 
-`1` to `5` change the view, `n` starts a new task, `Esc` closes the card and
-`/` goes to the line at the bottom. Type there to find a card, or with a card
-open say what to do: `high`, `mine`, `hand to agent`, `wait until friday`,
+`1` to `5` change the view, `n` starts a new task and `/` goes to the line
+at the bottom. Type there to find a card, or with a card open say what to do:
+`high`, `mine`, `hand to agent`, `wait until friday`,
 `visit tried it, feels slow`, `done shipped in a1b2c3d`.
+
+`Esc` closes the innermost thing open: it leaves the line, a note you are
+editing or the new-task form first, then closes the card, and with nothing
+open closes the board (right-click the lamp to bring it back).
 
 What you write is signed. A visit typed on the board is logged as
 "Nate: ...", the same way an agent records something you told it.

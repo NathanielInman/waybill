@@ -322,8 +322,15 @@ impl Shell {
             {
                 return glib::Propagation::Proceed;
             }
-            if key == gdk::Key::Escape && s.opened.borrow().is_some() {
-                s.close();
+            // Esc closes the innermost thing open: a field handles it
+            // itself (see `typing` above), then the card pane, then the
+            // board. The lamp's right-click brings the board back.
+            if key == gdk::Key::Escape {
+                if s.opened.borrow().is_some() {
+                    s.close();
+                } else {
+                    s.window.close();
+                }
                 return glib::Propagation::Stop;
             }
             let Some(ch) = key.to_unicode() else {

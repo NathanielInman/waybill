@@ -517,6 +517,9 @@ impl Detail {
         row.append(&save);
         row.append(&cancel);
         slot.append(&row);
+        // Esc leaves the editor the way Cancel does, without saving.
+        let c = cancel.clone();
+        on_escape(&view, move || c.emit_clicked());
         view.grab_focus();
     }
 
@@ -596,6 +599,20 @@ impl Detail {
         note.set_wrap_mode(gtk::WrapMode::WordChar);
         note.set_monospace(true);
         note.add_css_class("editor");
+        // Esc in any field closes the form, the way it closes a card.
+        for w in [
+            entry.upcast_ref::<gtk::Widget>(),
+            project.upcast_ref(),
+            note.upcast_ref(),
+        ] {
+            let me = Rc::downgrade(self);
+            on_escape(w, move || {
+                if let Some(d) = me.upgrade() {
+                    d.busy.set(false);
+                    d.send(Msg::Close);
+                }
+            });
+        }
         let scroll = gtk::ScrolledWindow::builder()
             .hscrollbar_policy(gtk::PolicyType::Never)
             .min_content_height(170)
@@ -735,4 +752,17 @@ fn render_note(text: &str) -> gtk::Box {
         }
     }
     out
+}
+
+/// Runs `f` when Esc is pressed in `w` (a field), and stops the key there.
+fn on_escape(w: &impl IsA<gtk::Widget>, f: impl Fn() + 'static) {
+    let keys = gtk::EventControllerKey::new();
+    keys.connect_key_pressed(move |_, key, _, _| {
+        if key == gtk::gdk::Key::Escape {
+            f();
+            return gtk::glib::Propagation::Stop;
+        }
+        gtk::glib::Propagation::Proceed
+    });
+    w.add_controller(keys);
 }
