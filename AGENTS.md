@@ -22,8 +22,10 @@ for whatever you change.
   `drawer.rs` is the layer-shell drawer, and everything drawn with cairo is
   in `charts.rs`. `theme.rs` owns the palette, which feeds both the CSS and
   the charts. `anim.rs` and `stage.rs` came from Tablet's board.
-- `bar-anchor`: anchoring and panel placement, no GTK. A copy of Tablet's;
-  its `Anchor` JSON must stay identical to the siblings'.
+- `bar-anchor` is no longer in this repo: it's the shared
+  [bar-anchor](https://github.com/NathanielInman/bar-anchor) crate, pinned by tag in the root `Cargo.toml`.
+  Change it there and move the tag; its `Anchor` JSON must stay
+  identical across the apps.
 
 ## Build and test
 

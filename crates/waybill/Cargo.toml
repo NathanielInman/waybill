@@ -11,7 +11,7 @@ publish = false
 
 [dependencies]
 waybill-core = { path = "../waybill-core" }
-bar-anchor = { path = "../bar-anchor" }
+bar-anchor.workspace = true
 serde.workspace = true
 libc.workspace = true
 serde_json.workspace = true

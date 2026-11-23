@@ -73,8 +73,8 @@ Three crates:
   what makes it testable and lets the demo and screenshots be exact.
 - **`waybill`**: the CLI and the waybar module.
 - **`waybill-board`**: the window, and with `--drawer` the Desk drawer.
-- **`bar-anchor`**: where the bar icon is, for the drawer. A copy of
-  Tablet's.
+- **`bar-anchor`**: where the bar icon is, for the drawer, from the
+  shared [bar-anchor](https://github.com/NathanielInman/bar-anchor) crate.
 
 There is no daemon. The board reads the list itself on a worker thread,
 claims are files that anyone can judge, and the only resident process is
