@@ -1,0 +1,30 @@
+# What dot-files needs to know about Waybill. Its README is built from this
+# file (docs/bar/build.py in NathanielInman/dotfiles reads it beside the
+# hero), so a change here reaches that README on its next build.
+
+name = "Waybill"
+repo = "https://github.com/NathanielInman/waybill"
+language = "Rust"
+# Its module in packages/waybar/.config/waybar/config.jsonc.
+module = "custom/waybill"
+# "Waybill for <purpose>" in the README's list of the suite.
+purpose = "the task list my agents work from"
+# The "In the bar" cell of the suite table.
+lamp = "Amber when a decision or a task of yours holds work up"
+# Scripts and programs it replaced. dot-files' build fails if a doc still
+# mentions one outside a sentence that says it was replaced.
+retired = [
+  "vit",
+]
+# Its stow package in dot-files, or "" when it needs none.
+stow = "waybill"
+# Install from a clean Arch machine, run in order.
+install = [
+  "sudo pacman -S --needed gtk4 gtk4-layer-shell task",
+  "git clone https://github.com/NathanielInman/waybill.git ~/Sites/waybill",
+  "cd ~/Sites/waybill && cargo build --release",
+  "install -Dm755 target/release/waybill target/release/waybill-board -t ~/.local/bin/",
+  "install -Dm644 packaging/io.github.nathanielinman.Waybill.desktop -t ~/.local/share/applications",
+]
+# Run after installing (and stowing) to check the setup.
+check = []
