@@ -565,6 +565,7 @@ impl Shell {
         self.lamp.add_css_class(match lamp.state {
             waybill_core::lamp::State::Calm => "ok",
             waybill_core::lamp::State::NeedsYou => "warn",
+            waybill_core::lamp::State::Alarm => "bad",
             waybill_core::lamp::State::Error => "bad",
         });
         self.lamp.set_tooltip_text(Some(&lamp.why));

@@ -259,6 +259,7 @@ impl Drawer {
         self.lamp.add_css_class(match lamp.state {
             waybill_core::lamp::State::Calm => "ok",
             waybill_core::lamp::State::NeedsYou => "warn",
+            waybill_core::lamp::State::Alarm => "bad",
             waybill_core::lamp::State::Error => "bad",
         });
         self.counts.set_label(&format!(
@@ -272,6 +273,18 @@ impl Drawer {
             (None, 1) => "One task waits on you.".to_string(),
             (None, n) => format!("{n} tasks wait on you."),
         };
+        let alarms = waybill_core::lamp::alarms(&s);
+        if !alarms.is_empty() {
+            let what = if alarms.len() == 1 {
+                "Something broke".to_string()
+            } else {
+                format!("{} things broke", alarms.len())
+            };
+            text = format!(
+                "<span foreground=\"{}\" weight=\"bold\">{what}.</span> {text}",
+                pal.bad.hex()
+            );
+        }
         if p.holding > 0 {
             text.push_str(&format!(
                 " <span foreground=\"{}\">{} of them hold{} up {} other{}.</span>",
@@ -285,8 +298,13 @@ impl Drawer {
         self.headline.set_markup(&text);
 
         ui::clear(&self.list);
-        // Decisions first: they are the ones a click here can settle.
-        let (decisions, rest): (Vec<&Card>, Vec<&Card>) = yours.iter().partition(|c| c.decision);
+        // Alarms first: something broke, and it is not on the user's lane.
+        for c in alarms.iter().take(3) {
+            self.list.append(&self.row(c));
+        }
+        // Then decisions: they are the ones a click here can settle.
+        let (decisions, rest): (Vec<&Card>, Vec<&Card>) =
+            yours.iter().filter(|c| !c.alarm).partition(|c| c.decision);
         for c in decisions.iter().take(3) {
             self.list.append(&self.row(c));
             let options = self.world.options(c);
@@ -343,7 +361,9 @@ impl Drawer {
 
     fn row(&self, c: &Card) -> gtk::Button {
         let line = hbox(10);
-        let mark = if !c.frees.is_empty() {
+        let mark = if c.alarm {
+            label("●", &["bad"])
+        } else if !c.frees.is_empty() {
             label(&c.frees.len().to_string(), &["big", "num", "warn"])
         } else if c.decision {
             label("◆", &["violet"])

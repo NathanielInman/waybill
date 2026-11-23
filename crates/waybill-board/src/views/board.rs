@@ -207,6 +207,9 @@ pub fn card(s: &Snapshot, c: &Card, tx: &Tx) -> gtk::Button {
     if let Some(p) = ui::priority(c.priority) {
         meta.append(&p);
     }
+    if c.alarm {
+        meta.append(&chip("alarm", "bad"));
+    }
     if c.decision {
         meta.append(&chip("decision", "violet"));
     }
@@ -300,6 +303,9 @@ pub fn card(s: &Snapshot, c: &Card, tx: &Tx) -> gtk::Button {
     let b = ui::row_button(&body, &["card"]);
     if c.yours {
         b.add_css_class("yours");
+    }
+    if c.alarm {
+        b.add_css_class("alarm");
     }
     if doing {
         b.add_css_class("doing");

@@ -52,10 +52,12 @@ impl Default for LintCfg {
 pub struct BarCfg {
     /// What the module shows. `{lamp}` is a dot, `{you}` the tasks waiting
     /// on you, `{holding}` those that hold others up, `{ready}`, `{doing}`
-    /// and `{done}` the lane counts.
+    /// and `{done}` the lane counts, `{alarms}` the open alarms.
     pub format: String,
     /// The same, when nothing of yours holds anything up.
     pub format_calm: String,
+    /// The same, while an alarm is open.
+    pub format_alarm: String,
 }
 
 impl Default for BarCfg {
@@ -63,6 +65,7 @@ impl Default for BarCfg {
         BarCfg {
             format: "● {holding}".into(),
             format_calm: "●".into(),
+            format_alarm: "● {alarms}".into(),
         }
     }
 }
@@ -97,6 +100,9 @@ pub struct TagsCfg {
     pub hands: Vec<String>,
     /// The tag for a task blocked on a choice.
     pub decision: String,
+    /// The tag for something broken that should be looked at first, such as
+    /// a nightly job that failed. Any open task with it turns the lamp red.
+    pub alarm: String,
 }
 
 impl Default for TagsCfg {
@@ -104,6 +110,7 @@ impl Default for TagsCfg {
         TagsCfg {
             hands: vec!["me".into()],
             decision: "decision".into(),
+            alarm: "alarm".into(),
         }
     }
 }

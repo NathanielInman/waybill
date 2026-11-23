@@ -150,8 +150,9 @@ urgency; the others by Taskwarrior's urgency.
 on this task directly or through other open tasks. `waits_on` is the direct
 open dependencies. A finished dependency holds nothing.
 
-The header lamp is amber when a task of the user's frees anything, or a
-decision is open. It is red when the list could not be read.
+The header lamp is red while an alarm is open or when the list could not be
+read, and amber when a task of the user's frees anything or a decision is
+open.
 
 ### Lines
 
@@ -282,11 +283,13 @@ not parse is ignored with a message and the defaults are used.
 | `notes.dir` | `""` | Notes folder; empty means `notes/` under `data.location`. |
 | `tags.hands` | `["me"]` | Tags that mean the task needs the user. |
 | `tags.decision` | `"decision"` | The tag for a task blocked on a choice. |
+| `tags.alarm` | `"alarm"` | The tag for something broken to look at first: the lamp turns red while one is open. |
 | `lint.title` | `50` | The longest a card title may be. |
 | `lint.tags` | `["research", "bug", "verify"]` | Tags allowed besides the hands and decision tags. |
 | `lint.projects` | `[]` | Known projects; empty allows any. |
 | `bar.format` | `"● {holding}"` | The bar module's text when something waits on the user. |
 | `bar.format_calm` | `"●"` | The same, when nothing does. |
+| `bar.format_alarm` | `"● {alarms}"` | The same, while an alarm is open. |
 | `board.fullscreen` | `false` | Open the window fullscreen. |
 | `theme.from` | `"waybar"` | `"waybar"` or `"none"`. |
 | `theme.font` | the bar's | Font family for the window and charts. |
@@ -475,8 +478,15 @@ after its own read, because reading can touch the database's files. It
 prints only when the line changes and exits when waybar is gone.
 
 The lamp follows one rule, shared with the window's header (`lamp.rs`):
-`needs-you` when a task of the user's frees anything or a decision is open,
-`error` when the list cannot be read, `calm` otherwise.
+`error` when the list cannot be read; `alarm` while any open task carries the
+alarm tag, with the alarms' titles in the tooltip; `needs-you` when a task of
+the user's frees anything or a decision is open; `calm` otherwise.
+
+An alarm is for something that broke and should be looked at before
+anything else, such as a nightly job that failed. Whatever files it (a
+script, a hook) adds the tag and closes the task when the thing works
+again; Waybill only shows it. It is not a hands tag: an agent may pick an
+alarm up, find the cause and refile it under the right project.
 
 `waybill toggle` asks the compositor where the pointer is (`bar-anchor`, a
 copy of Tablet's) and sends `{"toggle": <anchor>}` to
@@ -485,8 +495,9 @@ copy of Tablet's) and sends `{"toggle": <anchor>}` to
 
 The drawer is a layer-shell overlay (namespace `waybill`) holding one panel,
 placed by `stage.rs` at the anchor and animated by `anim.rs`, both from the
-sibling boards. It lists decisions first, each with up to three option
-buttons, then the user's tasks by what they free. A click on a row opens the
+sibling boards. Open alarms come first, under a red "Something broke." in the
+headline, then decisions, each with up to three option buttons, then the
+user's tasks by what they free. A click on a row opens the
 board on that card (`waybill-board --card <uuid>`). Esc or a click outside
 closes it. Under a compositor without layer-shell it opens as a plain window.
 

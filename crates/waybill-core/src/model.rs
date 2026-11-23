@@ -13,6 +13,7 @@ use std::collections::{HashMap, HashSet};
 pub struct Rules {
     pub hands: Vec<String>,
     pub decision: String,
+    pub alarm: String,
 }
 
 impl Default for Rules {
@@ -20,6 +21,7 @@ impl Default for Rules {
         Rules {
             hands: vec!["me".into()],
             decision: "decision".into(),
+            alarm: "alarm".into(),
         }
     }
 }
@@ -73,10 +75,13 @@ pub struct Card {
     pub project: String,
     /// 'H', 'M', 'L' or ' '.
     pub priority: char,
-    /// Tags other than the hands and decision tags.
+    /// Tags other than the hands, decision and alarm tags.
     pub tags: Vec<String>,
     pub yours: bool,
     pub decision: bool,
+    /// Something broken to look at first: the lamp is red while one is open.
+    #[serde(default)]
+    pub alarm: bool,
     /// Waits on at least one open task.
     pub blocked: bool,
     pub lane: Lane,
@@ -344,11 +349,12 @@ pub fn build(
             tags: t
                 .tags
                 .iter()
-                .filter(|g| !rules.hands.contains(g) && **g != rules.decision)
+                .filter(|g| !rules.hands.contains(g) && **g != rules.decision && **g != rules.alarm)
                 .cloned()
                 .collect(),
             yours: rules.yours(t),
             decision: t.has_tag(&rules.decision),
+            alarm: t.has_tag(&rules.alarm),
             blocked: t.open() && t.depends.iter().any(|d| open(d)),
             lane,
             entry: t.entry,

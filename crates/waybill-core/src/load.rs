@@ -83,6 +83,7 @@ pub fn rules(cfg: &Config) -> Rules {
     Rules {
         hands: cfg.tags.hands.clone(),
         decision: cfg.tags.decision.clone(),
+        alarm: cfg.tags.alarm.clone(),
     }
 }
 

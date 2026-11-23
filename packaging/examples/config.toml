@@ -16,6 +16,9 @@ dir = ""
 hands = ["me"]
 # A task blocked on a choice. It lands in Needs you as well.
 decision = "decision"
+# Something broke and should be looked at first. While one is open the lamp
+# is red and the card has a red border; whatever filed it closes it.
+alarm = "alarm"
 
 [lint]
 # What `waybill lint` and `waybill add` hold a task to.
@@ -25,9 +28,11 @@ projects = []                           # known projects; empty allows any
 
 [bar]
 # What the waybar module shows when something waits on you, and when
-# nothing does. {lamp} {holding} {you} {ready} {doing} {done}
+# nothing does, and while an alarm is open.
+# {lamp} {holding} {you} {ready} {doing} {done} {alarms}
 format = "● {holding}"
 format_calm = "●"
+format_alarm = "● {alarms}"
 
 [board]
 # Open the window fullscreen, over the bar. Leave it off to let the

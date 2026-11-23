@@ -198,6 +198,8 @@ button.card:hover {
 }
 button.card.yours { border-color: alpha(@wb_warn, 0.34); }
 button.card.yours:hover { border-color: alpha(@wb_warn, 0.75); }
+button.card.alarm { border-color: alpha(@wb_bad, 0.6); background: alpha(@wb_bad, 0.08); }
+button.card.alarm:hover { border-color: @wb_bad; }
 button.card.doing { border-color: alpha(@wb_ok, 0.4); background: mix(@wb_tile, @wb_ok, 0.045); }
 button.card.parked { opacity: 0.62; }
 .card-title { color: @wb_bright; font-size: 13.5px; }

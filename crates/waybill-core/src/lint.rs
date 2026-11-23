@@ -47,6 +47,7 @@ fn tag_rules(tags: &[String], cfg: &Config) -> Vec<(&'static str, String)> {
         .filter(|tag| {
             !(cfg.tags.hands.contains(tag)
                 || **tag == cfg.tags.decision
+                || **tag == cfg.tags.alarm
                 || cfg.lint.tags.contains(tag))
         })
         .map(|tag| {
@@ -200,7 +201,7 @@ mod tests {
             title: "Wire the  victory screen".into(),
             project: Some("plos.db".into()),
             priority: Some('M'),
-            tags: vec!["bug".into(), "me".into(), "decision".into()],
+            tags: vec!["bug".into(), "me".into(), "decision".into(), "alarm".into()],
             ..Default::default()
         };
         assert!(new_task(&good, &cfg).is_empty());

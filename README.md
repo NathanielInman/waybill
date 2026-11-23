@@ -172,13 +172,16 @@ uses Taskwarrior's numbers, which change whenever a task closes.
 ```
 
 The lamp is amber when a task of yours holds other work up or a decision is
-open, and shows how many. Otherwise it is calm. A click opens the drawer at
+open, and shows how many. It turns red while a task tagged `alarm` is open:
+something broke and should be looked at first, like a nightly job that
+failed. Otherwise it is calm. A click opens the drawer at
 the icon; a right-click opens the board. The module's class is `calm`,
-`needs-you` or `error`:
+`needs-you`, `alarm` or `error`:
 
 ```css
 #custom-waybill.calm { color: #616e88; }
 #custom-waybill.needs-you { color: #ebcb8b; }
+#custom-waybill.alarm { color: #bf616a; }
 #custom-waybill.error { color: #bf616a; }
 ```
 
@@ -221,6 +224,7 @@ as yours:
 [tags]
 hands = ["nate"]        # these tasks need my hands; agents leave them
 decision = "decision"   # blocked on a choice of mine
+alarm = "alarm"         # something broke: the lamp goes red, the card too
 ```
 
 A task with a `hands` tag or the `decision` tag lands in **Needs you**. A
