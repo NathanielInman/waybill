@@ -42,6 +42,8 @@ pub enum Msg {
     Present(Option<String>),
     /// Show or hide the drawer, at this anchor (the drawer only).
     Toggle(Option<bar_anchor::Anchor>),
+    /// Another app's drawer opened: close this one (the drawer only).
+    OtherDrawerOpened,
 }
 
 /// Where the board's tasks live. `desk` is `None` for the demo list and for
@@ -499,7 +501,7 @@ impl Shell {
                 self.window.present();
                 crate::app::raise();
             }
-            Msg::Toggle(_) => {}
+            Msg::Toggle(_) | Msg::OtherDrawerOpened => {}
         }
     }
 

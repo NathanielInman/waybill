@@ -229,6 +229,7 @@ impl Drawer {
                 self.render();
             }
             Msg::Close => self.hide("asked to"),
+            Msg::OtherDrawerOpened => self.hide("another app's drawer opened"),
             Msg::Reopen | Msg::New(_) | Msg::Present(_) => {}
         }
     }
@@ -410,6 +411,7 @@ impl Drawer {
         self.window.set_visible(true);
         self.window.present();
         if !was_visible {
+            bar_anchor::drawers::opened("waybill");
             self.spring.play_in(0);
             self.spark.play();
         }

@@ -339,6 +339,18 @@ pub fn main() -> glib::ExitCode {
                 app.quit();
                 return;
             }
+            // One drawer open at a time across the apps: another app's
+            // drawer opening closes this one.
+            if shot.is_none() {
+                let tx = tx.clone();
+                match bar_anchor::drawers::listen("waybill", move || {
+                    let _ = tx.send_blocking(Msg::OtherDrawerOpened);
+                }) {
+                    // Lives as long as the drawer process does.
+                    Ok(l) => std::mem::forget(l),
+                    Err(e) => eprintln!("waybill-board: {e}"),
+                }
+            }
             // Asking a display that is not Wayland makes the library complain.
             let wayland = gdk::Display::default().is_some_and(|d| d.backend().is_wayland());
             let layer = shot.is_none() && wayland && gtk4_layer_shell::is_supported();
