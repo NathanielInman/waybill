@@ -27,4 +27,6 @@ install = [
   "install -Dm644 packaging/io.github.nathanielinman.Waybill.desktop -t ~/.local/share/applications",
 ]
 # Run after installing (and stowing) to check the setup.
-check = []
+check = [
+  "waybill doctor",
+]

@@ -2,7 +2,8 @@
 //! lines, a log of visits and the numbers behind the charts: plain data in,
 //! plain data out, no UI. Everything that changes the task list is in `act`
 //! and goes through the `task` binary; `agent` builds the pick-up protocol
-//! on top of it, and `claim` records which session holds a started task.
+//! on top of it, `claim` records which session holds a started task, and
+//! `doctor` checks the setup.
 
 pub mod act;
 pub mod agent;
@@ -10,6 +11,7 @@ pub mod claim;
 pub mod clock;
 pub mod config;
 pub mod demo;
+pub mod doctor;
 pub mod find;
 pub mod lamp;
 pub mod lines;

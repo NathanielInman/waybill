@@ -496,6 +496,13 @@ closes it. Under a compositor without layer-shell it opens as a plain window.
 and `lanes` also take `--demo`. A failed command prints one line to stderr
 and exits 1.
 
+`waybill doctor` checks the setup, one `ok`, `fail` or `info` line each:
+the config, `task _version` (3 or newer), `data.location`, an export, the
+`ref` UDA, the notes folder, the waybar config and the `waybill bar` process
+under waybar, the compositor, `waybill-board` beside `waybill`, GTK 4 and
+gtk4-layer-shell, and the launcher entry. It only reads, and exits 1 when a
+check fails.
+
 `waybill-board` takes `--demo`, `--card <uuid>`, `--fullscreen`, `--windowed`
 and `--drawer`, and for
 screenshots `--snapshot <file>`, `--shot <png>`, `--tab <view>`,

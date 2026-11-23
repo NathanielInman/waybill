@@ -47,6 +47,9 @@ Looking:
   waybill lint [--strict]               Open tasks that break the house rules
   waybill snapshot                      Everything the board draws, as JSON
   waybill whoami                        Who a claim made here would name
+  waybill doctor                        Check Taskwarrior, the config, waybar,
+                                        the drawer and the launcher; exits 1
+                                        when something is broken
 
 The bar:
   waybill bar                           The waybar module (prints a line per change)
@@ -563,6 +566,18 @@ fn run() -> anyhow::Result<()> {
             }
             Ok(())
         }
+        "doctor" => {
+            let checks = doctor();
+            print(json, &checks, || {
+                for c in &checks {
+                    println!("{}", c.line());
+                }
+            })?;
+            if waybill_core::doctor::failed(&checks) {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
         "bar" => bar::run(demo),
         "toggle" => bar::toggle(),
         "--version" | "-V" => {
@@ -575,6 +590,43 @@ fn run() -> anyhow::Result<()> {
         }
         other => bail!("unknown command {other:?}; try waybill --help"),
     }
+}
+
+/// Everything `waybill doctor` checks, in the order it prints them.
+fn doctor() -> Vec<waybill_core::doctor::Check> {
+    use waybill_core::doctor::{self, Check};
+    let (cfg, config) = doctor::config();
+    let mut checks = vec![config];
+    checks.extend(doctor::taskwarrior(&cfg));
+    checks.extend(doctor::waybar());
+    checks.push(match bar_anchor::compositor() {
+        Some(wm @ ("Hyprland" | "sway")) => Check::ok(
+            "compositor",
+            format!("{wm}: the drawer opens at the clicked icon and the board comes forward"),
+        ),
+        Some(wm) => Check::ok(
+            "compositor",
+            format!("{wm}: the drawer opens at the clicked icon; the board asks for attention"),
+        ),
+        None => Check::info(
+            "compositor",
+            "not Hyprland, sway or niri; the drawer opens centered",
+        ),
+    });
+    let board = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|d| d.join("waybill-board")))
+        .filter(|p| p.exists());
+    checks.push(match board {
+        Some(p) => Check::ok("board", waybill_core::paths::tilde(&p)),
+        None => Check::info(
+            "board",
+            "waybill-board is not next to waybill; it must be on PATH",
+        ),
+    });
+    checks.extend(doctor::libraries());
+    checks.push(doctor::desktop_entry());
+    checks
 }
 
 /// Refuses a task that breaks the house rules `waybill lint` checks, so a

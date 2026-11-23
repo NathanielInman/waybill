@@ -91,7 +91,14 @@ git clone https://github.com/NathanielInman/waybill && cd waybill
 cargo build --release
 install -Dm755 target/release/waybill target/release/waybill-board -t ~/.local/bin
 install -Dm644 packaging/io.github.nathanielinman.Waybill.desktop -t ~/.local/share/applications
+waybill doctor
 ```
+
+Waybill keeps a task's marker in a `ref` field, so the taskrc needs
+`uda.ref.type=string` (and `uda.ref.label=Ref` for Taskwarrior's reports).
+`waybill doctor` checks that, Taskwarrior 3 and its data location, the
+config, the notes folder, the waybar module, GTK 4 and gtk4-layer-shell, and
+the launcher entry, and exits 1 when something is broken.
 
 Then `waybill-board`, or `waybill-board --demo` to look around first.
 

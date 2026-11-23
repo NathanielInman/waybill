@@ -10,6 +10,15 @@ pub fn home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/"))
 }
 
+/// A path under the home folder written with `~`, for messages.
+pub fn tilde(p: &std::path::Path) -> String {
+    match p.strip_prefix(home()) {
+        Ok(rest) if rest.as_os_str().is_empty() => "~".into(),
+        Ok(rest) => format!("~/{}", rest.display()),
+        Err(_) => p.display().to_string(),
+    }
+}
+
 /// Expands a leading `~`.
 pub fn expand(s: &str) -> PathBuf {
     let s = s.trim();
