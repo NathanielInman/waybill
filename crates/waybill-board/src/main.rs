@@ -11,7 +11,6 @@ fn main() {
 }
 
 #[cfg(target_os = "linux")]
-mod actions;
 #[cfg(target_os = "linux")]
 mod anim;
 #[cfg(target_os = "linux")]
@@ -23,7 +22,6 @@ mod detail;
 #[cfg(target_os = "linux")]
 mod drawer;
 #[cfg(target_os = "linux")]
-mod palette;
 #[cfg(target_os = "linux")]
 mod shell;
 #[cfg(target_os = "linux")]

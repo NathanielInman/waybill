@@ -2,7 +2,6 @@
 //! note laid out beside its visits, what it waits on and what it frees, and
 //! a row of buttons that each print their key.
 
-use crate::actions::Action;
 use crate::shell::{Msg, World};
 use crate::ui::{self, chip, esc, hbox, label, vbox};
 use crate::views::Tx;
@@ -13,6 +12,7 @@ use waybill_core::act::NewTask;
 use waybill_core::claim::HoldState;
 use waybill_core::model::{Card, Lane, Snapshot, is_ruling};
 use waybill_core::note::{self, Block};
+use waybill_core::say::{self, Action, Offer};
 
 type Run = Rc<dyn Fn()>;
 
@@ -90,6 +90,33 @@ impl Detail {
         }
         b.connect_clicked(move |_| run());
         b
+    }
+
+    /// A button for one of the card's offers. One that asks for a line
+    /// opens a prompt in `slot` first.
+    fn offer(self: &Rc<Self>, offer: &Offer, uuid: &str, slot: &gtk::Box) -> gtk::Button {
+        let run: Run = match &offer.ask {
+            None => match offer.action(uuid, "") {
+                Some(action) => self.doing(action),
+                None => Rc::new(|| {}),
+            },
+            Some(hint) => {
+                let (me, sl, hint, o, u) = (
+                    Rc::downgrade(self),
+                    slot.clone(),
+                    hint.clone(),
+                    offer.clone(),
+                    uuid.to_string(),
+                );
+                Rc::new(move || {
+                    if let Some(d) = me.upgrade() {
+                        let (o, u) = (o.clone(), u.clone());
+                        d.prompt(&sl, &hint, move |t| o.action(&u, &t));
+                    }
+                })
+            }
+        };
+        self.button(&offer.label, offer.key, offer.style, run)
     }
 
     fn doing(self: &Rc<Self>, action: Action) -> Run {
@@ -189,148 +216,33 @@ impl Detail {
         let uuid = c.uuid.clone();
         let slot = vbox(0);
         if open {
-            let row = hbox(6);
-            let started = c.lane == Lane::Doing;
-            row.append(&if started {
-                self.button(
-                    "Stop",
-                    Some('s'),
-                    "",
-                    self.doing(Action::Stop(uuid.clone())),
-                )
+            let options = if c.decision {
+                note_text.as_deref().map(note::options).unwrap_or_default()
             } else {
-                self.button(
-                    "Start",
-                    Some('s'),
-                    "go",
-                    self.doing(Action::Start(uuid.clone())),
-                )
-            });
-            let (me, sl, u) = (Rc::downgrade(self), slot.clone(), uuid.clone());
-            row.append(&self.button(
-                "Done",
-                Some('d'),
-                "go",
-                Rc::new(move || {
-                    if let Some(d) = me.upgrade() {
-                        let u = u.clone();
-                        d.prompt(&sl, "A closing line, or just Enter", move |t| {
-                            Some(Action::Done(u.clone(), t))
-                        });
-                    }
-                }),
-            ));
-            let (me, sl, u) = (Rc::downgrade(self), slot.clone(), uuid.clone());
-            row.append(&self.button(
-                "Visit",
-                Some('v'),
-                "",
-                Rc::new(move || {
-                    if let Some(d) = me.upgrade() {
-                        let u = u.clone();
-                        d.prompt(&sl, "What happened, and what is next", move |t| {
-                            (!t.trim().is_empty()).then(|| Action::Visit(u.clone(), t))
-                        });
-                    }
-                }),
-            ));
-            let (me, sl, u) = (Rc::downgrade(self), slot.clone(), uuid.clone());
-            let parked = c.lane == Lane::Parked;
-            row.append(&if parked {
-                self.button(
-                    "Unpark",
-                    Some('w'),
-                    "",
-                    self.doing(Action::Park(uuid.clone(), String::new())),
-                )
-            } else {
-                self.button(
-                    "Park",
-                    Some('w'),
-                    "",
-                    Rc::new(move || {
-                        if let Some(d) = me.upgrade() {
-                            let u = u.clone();
-                            d.prompt(&sl, "Until when: friday, 2026-12-01, someday", move |t| {
-                                let date = t
-                                    .split_whitespace()
-                                    .last()
-                                    .unwrap_or("someday")
-                                    .to_lowercase();
-                                Some(Action::Park(u.clone(), date))
-                            });
-                        }
-                    }),
-                )
-            });
-            self.body.append(&row);
-
-            let row = hbox(6);
-            for (p, key) in [('H', 'h'), ('M', 'm'), ('L', 'l')] {
-                let b = self.button(
-                    &p.to_string(),
-                    Some(key),
-                    "",
-                    self.doing(Action::Priority(uuid.clone(), p)),
-                );
-                if c.priority == p {
+                Vec::new()
+            };
+            let mut row: Option<(&str, gtk::Box)> = None;
+            for offer in say::offers(c, &options) {
+                let b = self.offer(&offer, &uuid, &slot);
+                if offer.on {
                     b.add_css_class("on");
                 }
-                row.append(&b);
-            }
-            row.append(&if c.yours {
-                self.button(
-                    "Hand to agents",
-                    Some('t'),
-                    "",
-                    self.doing(Action::Hands(uuid.clone(), false)),
-                )
-            } else {
-                self.button(
-                    "Take it",
-                    Some('t'),
-                    "",
-                    self.doing(Action::Hands(uuid.clone(), true)),
-                )
-            });
-            self.body.append(&row);
-
-            if c.decision {
-                self.body.append(&label("Decide", &["section"]));
-                let options = note_text.as_deref().map(note::options).unwrap_or_default();
-                let list = vbox(5);
-                for (i, option) in options.iter().enumerate() {
-                    let key = ['a', 'b', 'c'].get(i).copied();
-                    let b = self.button(
-                        option,
-                        key,
-                        "choice",
-                        self.doing(Action::Rule(uuid.clone(), option.clone())),
-                    );
+                let decide = offer.group == "decide";
+                if decide {
                     b.set_halign(gtk::Align::Start);
-                    list.append(&b);
                 }
-                let (me, sl, u) = (Rc::downgrade(self), slot.clone(), uuid.clone());
-                let other = self.button(
-                    if options.is_empty() {
-                        "Write the ruling"
-                    } else {
-                        "Something else"
-                    },
-                    Some('o'),
-                    "",
-                    Rc::new(move || {
-                        if let Some(d) = me.upgrade() {
-                            let u = u.clone();
-                            d.prompt(&sl, "Your ruling, in your words", move |t| {
-                                (!t.trim().is_empty()).then(|| Action::Rule(u.clone(), t))
-                            });
+                match &row {
+                    Some((group, r)) if *group == offer.group => r.append(&b),
+                    _ => {
+                        if decide {
+                            self.body.append(&label("Decide", &["section"]));
                         }
-                    }),
-                );
-                other.set_halign(gtk::Align::Start);
-                list.append(&other);
-                self.body.append(&list);
+                        let r = if decide { vbox(5) } else { hbox(6) };
+                        r.append(&b);
+                        self.body.append(&r);
+                        row = Some((offer.group, r));
+                    }
+                }
             }
             self.body.append(&slot);
         }

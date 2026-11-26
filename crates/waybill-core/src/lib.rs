@@ -21,5 +21,6 @@ pub mod model;
 pub mod note;
 pub mod paths;
 pub mod pulse;
+pub mod say;
 pub mod task;
 pub mod waybar;

@@ -465,6 +465,11 @@ reads a few plain words as actions: `start`, `stop`, `done [line]`,
 `hand to agent`, `park`, `unpark`, `wait until <date>`. A view's name goes
 to it and `new <title>` opens the form.
 
+The buttons, the words and the drops all live in `say.rs` in the core:
+`offers` lists the buttons a card shows (label, key, the words they send),
+`parse` reads the words and `perform` runs the action. Every screen that
+acts on the list calls these, so a new button or word is added once.
+
 Actions run on a worker thread and come back as one line in the footer; the
 list is reread at once. While the user is typing in the pane a reread does
 not rebuild it. The demo list and a saved snapshot are read-only.

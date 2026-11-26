@@ -11,16 +11,17 @@ for whatever you change.
   `pulse.rs` counts what the charts draw, `lamp.rs` is the one lamp rule.
   Those are plain data in, plain data out: callers pass `now` and a `Zone`.
   `act.rs` is every change to the list (each one a `task` command),
+  `say.rs` is what the user can say to it from any screen (the actions,
+  the buttons a card offers, the `/` line's words, what a drop means),
   `claim.rs` is who holds a started task, `agent.rs` is the pick-up protocol
   built on both, `lint.rs` the house rules. A new rule about where a task
   sits belongs in `model.rs` with a test; a new way to change the list
   belongs in `act.rs` with a case in `tests/e2e.rs`.
 - `waybill`: the CLI and the waybar module (one binary, `waybill`).
 - `waybill-board`: the GTK4 window and the drawer. `shell.rs` is the frame,
-  `views/` holds one file per view, `detail.rs` is the card pane,
-  `actions.rs` is what a click does, `palette.rs` reads the `/` line,
-  `drawer.rs` is the layer-shell drawer, and everything drawn with cairo is
-  in `charts.rs`. `theme.rs` owns the palette, which feeds both the CSS and
+  `views/` holds one file per view, `detail.rs` is the card pane (its
+  buttons come from `say::offers`), `drawer.rs` is the layer-shell drawer,
+  and everything drawn with cairo is in `charts.rs`. `theme.rs` owns the palette, which feeds both the CSS and
   the charts. `anim.rs` and `stage.rs` came from Tablet's board.
 - `bar-anchor` is no longer in this repo: it's the shared
   [bar-anchor](https://github.com/NathanielInman/bar-anchor) crate, pinned by tag in the root `Cargo.toml`.

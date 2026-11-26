@@ -2,10 +2,8 @@
 //! pane sliding in from the right, and a footer with what the view is for,
 //! what just happened and the `/` line.
 
-use crate::actions::{self, Action};
 use crate::charts::{self, Canvas};
 use crate::detail::Detail;
-use crate::palette::{self, Command};
 use crate::theme::{self, Rgba};
 use crate::ui::{self, hbox, label, vbox};
 use crate::views::board::BoardView;
@@ -23,6 +21,8 @@ use std::time::Duration;
 use waybill_core::agent::Desk;
 use waybill_core::clock;
 use waybill_core::model::{Card, Snapshot};
+use waybill_core::say::Command;
+use waybill_core::say::{self, Action};
 
 pub enum Msg {
     Snapshot(Box<Snapshot>),
@@ -413,7 +413,7 @@ impl Shell {
         };
         if !text.is_empty() {
             let opened = self.opened.borrow().clone();
-            if let Some((command, say)) = palette::parse(text, opened.as_deref()) {
+            if let Some((command, say)) = say::parse(text, opened.as_deref()) {
                 let row = hbox(8);
                 row.append(&label("→", &["accent"]));
                 row.append(&label(&say, &["bright"]));
@@ -437,7 +437,7 @@ impl Shell {
                 .iter()
                 .filter(|c| c.ended.is_none())
                 .filter_map(|c| {
-                    palette::score(text, &c.title, &c.project, &c.tags, &c.uuid).map(|s| (s, c))
+                    say::score(text, &c.title, &c.project, &c.tags, &c.uuid).map(|s| (s, c))
                 })
                 .collect();
             hits.sort_by_key(|(s, c)| (*s, c.title.len()));
@@ -520,8 +520,7 @@ impl Shell {
         };
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let result =
-                actions::perform(&desk, action, clock::now()).map_err(|e| format!("{e:#}"));
+            let result = say::perform(&desk, action, clock::now()).map_err(|e| format!("{e:#}"));
             let _ = tx.send_blocking(Msg::Did(result));
         });
     }

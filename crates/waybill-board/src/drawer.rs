@@ -2,7 +2,6 @@
 //! What waits on the user, what it frees, and decisions answered in one
 //! click, without going to the board.
 
-use crate::actions::{self, Action};
 use crate::anim::{Motion, Spring};
 use crate::charts::{self, Canvas};
 use crate::shell::{Msg, World};
@@ -20,6 +19,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 use waybill_core::clock;
 use waybill_core::model::{Card, Lane, Snapshot};
+use waybill_core::say::{self, Action};
 
 const WIDTH: f64 = 460.0;
 const MAX_HEIGHT: f64 = 780.0;
@@ -243,8 +243,7 @@ impl Drawer {
         };
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let result =
-                actions::perform(&desk, action, clock::now()).map_err(|e| format!("{e:#}"));
+            let result = say::perform(&desk, action, clock::now()).map_err(|e| format!("{e:#}"));
             let _ = tx.send_blocking(Msg::Did(result));
         });
     }

@@ -2,7 +2,6 @@
 //! Dragging a card to another lane does what the lane means.
 
 use super::{Tx, open};
-use crate::actions::Action;
 use crate::charts::{self, Canvas};
 use crate::shell::Msg;
 use crate::theme::{self, Rgba};
@@ -14,6 +13,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use waybill_core::claim::HoldState;
 use waybill_core::model::{Card, Lane, Snapshot};
+use waybill_core::say::dropped;
 
 struct Column {
     lane: Lane,
@@ -59,27 +59,6 @@ const COLUMNS: [(Lane, &str, &str, &str); 5] = [
         "Nothing has closed yet today.",
     ),
 ];
-
-/// What dropping a card from `from` onto `to` means.
-pub fn dropped(
-    uuid: &str,
-    from: Lane,
-    yours: bool,
-    to: Lane,
-) -> Result<Option<Action>, &'static str> {
-    let uuid = uuid.to_string();
-    Ok(match to {
-        _ if from == to => None,
-        Lane::Doing => Some(Action::Start(uuid)),
-        Lane::Done => Some(Action::Done(uuid, String::new())),
-        Lane::Yours if !yours => Some(Action::Hands(uuid, true)),
-        Lane::Ready if from == Lane::Doing => Some(Action::Stop(uuid)),
-        Lane::Ready if from == Lane::Parked => Some(Action::Park(uuid, String::new())),
-        Lane::Ready if yours => Some(Action::Hands(uuid, false)),
-        Lane::Held => return Err("A task is held by what it waits on, not by hand."),
-        _ => None,
-    })
-}
 
 impl BoardView {
     pub fn new(tx: Tx) -> BoardView {
@@ -319,41 +298,4 @@ pub fn card(s: &Snapshot, c: &Card, tx: &Tx) -> gtk::Button {
         b.add_controller(drag);
     }
     b
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_drop_does_what_the_lane_means() {
-        let d = |from, yours, to| dropped("u", from, yours, to);
-        assert_eq!(
-            d(Lane::Ready, false, Lane::Doing),
-            Ok(Some(Action::Start("u".into())))
-        );
-        assert_eq!(
-            d(Lane::Doing, false, Lane::Ready),
-            Ok(Some(Action::Stop("u".into())))
-        );
-        assert_eq!(
-            d(Lane::Yours, true, Lane::Ready),
-            Ok(Some(Action::Hands("u".into(), false)))
-        );
-        assert_eq!(
-            d(Lane::Ready, false, Lane::Yours),
-            Ok(Some(Action::Hands("u".into(), true)))
-        );
-        assert_eq!(
-            d(Lane::Parked, false, Lane::Ready),
-            Ok(Some(Action::Park("u".into(), String::new())))
-        );
-        assert_eq!(
-            d(Lane::Yours, true, Lane::Done),
-            Ok(Some(Action::Done("u".into(), String::new())))
-        );
-        assert_eq!(d(Lane::Ready, false, Lane::Ready), Ok(None));
-        assert_eq!(d(Lane::Doing, true, Lane::Yours), Ok(None), "already yours");
-        assert!(d(Lane::Ready, false, Lane::Held).is_err());
-    }
 }

@@ -1,7 +1,6 @@
 //! Desk: the user's own queue, ordered by how much work each task frees.
 
 use super::{Tx, open};
-use crate::actions::Action;
 use crate::charts::{self, Canvas, Ring};
 use crate::shell::{Msg, World};
 use crate::theme::{self, Rgba};
@@ -9,6 +8,7 @@ use crate::ui::{self, chip, hbox, label, vbox};
 use gtk::prelude::*;
 use std::rc::Rc;
 use waybill_core::model::{Card, Lane, Snapshot};
+use waybill_core::say::Action;
 
 pub struct DeskView {
     pub root: gtk::Box,
