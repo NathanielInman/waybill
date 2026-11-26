@@ -131,6 +131,7 @@ class Model(app: Application) : AndroidViewModel(app) {
                 Store.pair(ctx, pairing)
                 _state.update { s -> s.copy(pairing = pairing, screen = null, status = Status()) }
                 Watch.schedule(ctx)
+                Watch.now(ctx)
                 done(null)
             }.onFailure { done(it.message ?: "The desk did not answer.") }
         }

@@ -96,6 +96,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        // Opening the app brings the widget, the tile and notifications up to date.
+        if (Store.pairing(this) != null) Watch.now(this)
         if (Store.pairing(this) != null && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
