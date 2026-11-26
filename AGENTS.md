@@ -19,13 +19,21 @@ for whatever you change.
   built on both, `lint.rs` the house rules. A new rule about where a task
   sits belongs in `model.rs` with a test; a new way to change the list
   belongs in `act.rs` with a case in `tests/e2e.rs`.
+  `wire.rs` is what `waybill serve` sends the phone.
 - `waybill`: the CLI and the waybar module (one binary, `waybill`).
+  `serve.rs` is `waybill serve` and `waybill pair`, the phone's server.
 - `waybill-board`: the GTK4 window and the drawer. `shell.rs` is the frame,
   `views/` holds one file per view, `detail.rs` is the card pane (its
   buttons come from `say::offers`), `drawer.rs` is the layer-shell drawer,
   and everything drawn with cairo is in `charts.rs`. `theme.rs` holds the
   core's palette for the drawing thread; it feeds both the CSS and the
   charts. `anim.rs` and `stage.rs` came from Tablet's board.
+- `android/`: the Android app (Kotlin, Compose). It decides nothing: it
+  draws the `Screen` that `wire.rs` builds and sends back the words
+  `say::parse` reads. `Wire.kt` mirrors the wire, `ui/` holds one file per
+  view, `Watch.kt` is the background look for notifications, the widget
+  and the tile. A rule belongs in the core, never here; a new field shows
+  up in `Wire.kt` and in the view that draws it.
 - `bar-anchor` is no longer in this repo: it's the shared
   [bar-anchor](https://github.com/NathanielInman/bar-anchor) crate, pinned by tag in the root `Cargo.toml`.
   Change it there and move the tag; its `Anchor` JSON must stay
@@ -38,6 +46,20 @@ for whatever you change.
 `cargo fmt --all -- --check`. CI runs all four. The board needs GTK 4.12 or
 newer and gtk4-layer-shell (`.github/scripts/gtk4-layer-shell.sh` is how CI
 gets it). The end-to-end test needs a `task` binary and skips without one.
+
+The app builds with Gradle in `android/`. Run it under `lowprio`, one build
+at a time:
+
+```sh
+cd android
+lowprio ./gradlew --no-daemon --max-workers=4 testDebugUnitTest assembleDebug
+lowprio ./gradlew --no-daemon --max-workers=4 recordRoborazziDebug   # the README's phone shots
+```
+
+Its tests read `android/app/src/test/resources/demo/*.json`, which a Rust
+test writes from the demo list. When the wire changes, `cargo test` says
+the files are stale: run `WAYBILL_BLESS=1 cargo test -p waybill-core
+fixtures`, then the app's tests, then record the screenshots again.
 
 To look at the board without a desktop, render it under GTK's broadway
 backend:
@@ -99,7 +121,11 @@ Update in the same commit:
 - `packaging/examples/config.toml` for a new config key.
 
 Commits are conventional, scoped by area: `core`, `cli`, `board`, `drawer`,
-`bar`, `anchor`, `charts`, `theme`, `demo`, `docs`, `ci`.
+`bar`, `anchor`, `charts`, `theme`, `demo`, `android`, `docs`, `ci`.
+
+A change to what a screen shows reaches the phone too: when a view, a card
+action or the wire changes, look at the phone's screenshots after
+recording them, as you would the board's PNG.
 
 ## Platforms
 

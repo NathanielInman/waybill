@@ -1,0 +1,14 @@
+# Keeps `waybill serve` running for the phone app.
+#   install -Dm644 packaging/waybill-serve.service -t ~/.config/systemd/user
+#   systemctl --user enable --now waybill-serve
+[Unit]
+Description=Waybill for the phone app
+After=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/waybill serve
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

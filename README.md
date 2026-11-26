@@ -4,7 +4,15 @@
   <b>A board for Taskwarrior on a desk where agents do the building.</b><br>
   Five views of one task list, redrawn as your sessions write to it,<br>
   a lamp in your bar that turns amber only when the work is waiting on you,<br>
-  and one command that holds the whole pick-up protocol for your agents.
+  one command that holds the whole pick-up protocol for your agents,<br>
+  and an Android app that carries the same board in your pocket.
+</p>
+
+<p align="center">
+  <img src="docs/assets/screens/android/desk.png" width="24%" alt="Waybill on Android, the Desk: 12 tasks wait on you, 4 of them hold up 8 others, then the tasks that free the most and two decisions with their options as buttons.">
+  <img src="docs/assets/screens/android/decision.png" width="24%" alt="A decision open on the phone: Pick the launch discount, with its three options as buttons over its note.">
+  <img src="docs/assets/screens/android/lines.png" width="24%" alt="Lines on the phone: each dependency chain drawn as a rail line running down the screen, square stops for you and round ones for agents.">
+  <img src="docs/assets/screens/android/pulse.png" width="24%" alt="Pulse on the phone: tiles for finished today and this week, six weeks of finished and added tasks, and who the open work waits on.">
 </p>
 
 <p align="center">
@@ -51,6 +59,10 @@ can take, and work that needs **my hands**.
 - **Nothing to memorize.** Every button prints its key, a card drags to the
   lane you mean, and `/` takes plain words: "high", "wait until friday",
   "done shipped it".
+- **It goes where you go.** The Android app shows the same five views and
+  the drawer, and a decision an agent files reaches your phone as a
+  notification whose buttons are its options. See
+  [On your phone](#on-your-phone).
 - **Still plain Taskwarrior.** Every read is `task export` and every write is
   a `task` command. Waybill keeps no database, so `task` and vit work beside
   it.
@@ -80,6 +92,68 @@ can take, and work that needs **my hands**.
 
 These are screenshots of `waybill-board --demo`, a made-up studio's list you
 can open without touching your own.
+
+## On your phone
+
+Waybill for Android is the board for when you are away from the desk. It
+shows the same five views with the same cards in the same order and the
+same colors, because it decides nothing itself: `waybill serve` on the desk
+sends it what the board would draw, and it sends back the words the board's
+`/` line reads. A lane rule, a button or a `/` word added to the desk works
+on the phone as soon as the desk runs the new build, with no change to the
+app.
+
+<table>
+  <tr>
+    <td width="33%" valign="top"><img src="docs/assets/screens/android/desk.png" alt="The Desk on a phone: the headline, the tasks that free the most with bars, and decisions with their options as buttons."><br><b>Desk</b> is home: what waits on you, and what each of those frees. A decision's options are one tap each.</td>
+    <td width="33%" valign="top"><img src="docs/assets/screens/android/board.png" alt="The Board on a phone: a strip of lanes with their counts and the Doing lane's cards, each naming who holds it."><br><b>Board</b>, one lane at a time. Swipe a card right to finish it, left to start or stop it.</td>
+    <td width="33%" valign="top"><img src="docs/assets/screens/android/card.png" alt="A card open as a sheet: Start, Done, Visit and Park, the priorities, what it frees, its note with a checklist and its visits."><br><b>A card</b> slides up with the buttons the board shows, from the same list in the core.</td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screens/android/lines.png" alt="Lines on a phone, running top to bottom."><br><b>Lines</b> run down the screen, so a long line scrolls instead of shrinking.</td>
+    <td valign="top"><img src="docs/assets/screens/android/log.png" alt="The Log on a phone: a week of visits by the hour with the newest hours in amber, then the day's visits, rulings and finished tasks."><br><b>Log</b> counts what came in since you last looked.</td>
+    <td valign="top"><img src="docs/assets/screens/android/pulse.png" alt="Pulse on a phone: tiles, the six-week chart, the ring of who the work waits on and when the work happens."><br><b>Pulse</b>, stacked: the same numbers the board charts.</td>
+  </tr>
+</table>
+
+Outside the app:
+
+- **Decisions as notifications.** A new decision shows up with up to three
+  of its options as buttons, or two and a reply in your own words. A tap
+  writes the ruling, signed with your name, just as a click on the board
+  does. An alarm comes first, in red.
+- **The drawer as a widget.** The lamp, the headline, the top of your
+  queue and the day's count, on the home screen.
+- **The lamp as a tile.** A Quick Settings tile lit while something waits
+  on you.
+
+The phone looks at the desk every 15 minutes for the widget, the tile and
+notifications (Android's shortest period), and follows it live while the
+app is open.
+
+### Setting it up
+
+On the desk, start the server and pair the phone:
+
+```sh
+waybill serve      # leave it running; packaging/waybill-serve.service does that
+waybill pair       # prints a QR code: scan it with the phone's camera
+```
+
+Build the app with `./gradlew assembleRelease` in `android/` and install
+`app/build/outputs/apk/release/app-release.apk` (or `adb install` it), or
+take the APK from the latest run of the Android workflow. It needs Android
+10 or newer.
+
+The phone has to reach the desk: the same Wi-Fi, or a VPN to your home
+network. Without a certificate `waybill serve` speaks plain HTTP, which
+anyone on that network can read; set `serve.cert` and `serve.key` (a LAN
+DNS name with a Let's Encrypt certificate works) and it speaks HTTPS.
+`waybill doctor` says whether a phone is paired and whether the
+certificate loads, and `waybill pair --new` unpairs the old phone.
+
+These screenshots are drawn by `./gradlew recordRoborazziDebug` from the
+same made-up list as `waybill-board --demo`.
 
 ## Install
 
