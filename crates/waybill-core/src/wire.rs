@@ -274,4 +274,59 @@ mod tests {
         assert!(p.note.iter().any(|b| b.check == Some(false)));
         assert_eq!(p.offers[0].label, "Start");
     }
+
+    /// The phone's screenshot tests draw the demo list from these files, so
+    /// they are written from the same made-up moment the tests here use.
+    /// `WAYBILL_BLESS=1 cargo test -p waybill-core fixtures` rewrites them.
+    #[test]
+    fn the_phone_fixtures_are_current() {
+        let s = crate::demo::snapshot(NOW, Zone::Fixed(-6 * 3600));
+        let pal = Palette::default();
+        let note = |c: &Card| Some(crate::demo::note(&c.title));
+        let opts = options(&s, note);
+        let mut screen = screen(&s, &pal, opts.clone(), true);
+        screen.version = 1;
+        let mut glance = glance(&s, &opts);
+        glance.version = 1;
+        let pages: BTreeMap<&str, Page> = s
+            .cards
+            .iter()
+            .map(|c| (c.uuid.as_str(), page(c, note(c).as_deref())))
+            .collect();
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../android/app/src/test/resources/demo");
+        let pretty = |v: &dyn erased::Json| v.json() + "\n";
+        let files = [
+            ("screen.json", pretty(&screen)),
+            ("glance.json", pretty(&glance)),
+            ("pages.json", pretty(&pages)),
+        ];
+        let bless = std::env::var_os("WAYBILL_BLESS").is_some();
+        for (name, text) in files {
+            let path = dir.join(name);
+            if bless {
+                std::fs::create_dir_all(&dir).unwrap();
+                std::fs::write(&path, &text).unwrap();
+            } else {
+                let old = std::fs::read_to_string(&path).unwrap_or_default();
+                assert!(
+                    old == text,
+                    "{} is stale: the wire changed. Run WAYBILL_BLESS=1 cargo test -p \
+                     waybill-core fixtures, then the phone's tests.",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    mod erased {
+        pub trait Json {
+            fn json(&self) -> String;
+        }
+        impl<T: serde::Serialize> Json for T {
+            fn json(&self) -> String {
+                serde_json::to_string_pretty(self).unwrap()
+            }
+        }
+    }
 }

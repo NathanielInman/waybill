@@ -1,0 +1,344 @@
+{
+  "wire": 1,
+  "version": 1,
+  "lamp": {
+    "state": "needs-you",
+    "why": "4 tasks of yours hold up 8 others"
+  },
+  "headline": {
+    "count": "12 tasks wait on you.",
+    "holding": "4 of them hold up 8 others.",
+    "broke": null
+  },
+  "counts": {
+    "ready": 13,
+    "doing": 4,
+    "yours": 12,
+    "held": 9,
+    "parked": 3,
+    "done": 2
+  },
+  "done_week": 111,
+  "added_week": 127,
+  "spark": [
+    18,
+    24,
+    6,
+    5,
+    22,
+    14,
+    24,
+    14,
+    25,
+    6,
+    5,
+    14,
+    25,
+    2
+  ],
+  "alarms": [],
+  "decisions": [
+    {
+      "uuid": "a98912a9-6cce-4f03-a375-24ae20247a04",
+      "title": "Choose the rounding rule for refunds",
+      "project": "ledger-api",
+      "priority": "H",
+      "tags": [],
+      "yours": true,
+      "decision": true,
+      "alarm": false,
+      "blocked": false,
+      "lane": "yours",
+      "entry": 1794852000,
+      "started": null,
+      "ended": null,
+      "urgency": 10.0,
+      "reference": null,
+      "has_note": true,
+      "visits": [],
+      "frees": [],
+      "waits_on": [],
+      "activity": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hold": null
+    },
+    {
+      "uuid": "9c746214-3f97-42de-ac4a-c82b2c478557",
+      "title": "Pick the launch discount",
+      "project": "storefront",
+      "priority": "M",
+      "tags": [],
+      "yours": true,
+      "decision": true,
+      "alarm": false,
+      "blocked": false,
+      "lane": "yours",
+      "entry": 1794502800,
+      "started": null,
+      "ended": null,
+      "urgency": 7.5,
+      "reference": null,
+      "has_note": true,
+      "visits": [
+        {
+          "at": 1794758400,
+          "text": "split the work; review next (fbbc1cf)",
+          "shas": [
+            "fbbc1cf"
+          ]
+        }
+      ],
+      "frees": [],
+      "waits_on": [],
+      "activity": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      "hold": null
+    }
+  ],
+  "rest": [
+    {
+      "uuid": "c8efb980-e98e-4d9f-aec9-132573ff13aa",
+      "title": "Playtest the lantern level",
+      "project": "moonlight",
+      "priority": "H",
+      "tags": [],
+      "yours": true,
+      "decision": false,
+      "alarm": false,
+      "blocked": false,
+      "lane": "yours",
+      "entry": 1794294000,
+      "started": null,
+      "ended": null,
+      "urgency": 9.0,
+      "reference": null,
+      "has_note": true,
+      "visits": [],
+      "frees": [
+        "b8512378-dd20-4086-a6a5-1f5876b1b842",
+        "de048790-ff45-423f-ae69-689809a98979",
+        "70f22654-2038-44d6-a848-8520785f5264"
+      ],
+      "waits_on": [],
+      "activity": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hold": null
+    },
+    {
+      "uuid": "71cf22d9-e48e-47d8-a365-44ff18021e83",
+      "title": "Approve the map legend",
+      "project": "atlas",
+      "priority": "H",
+      "tags": [],
+      "yours": true,
+      "decision": false,
+      "alarm": false,
+      "blocked": false,
+      "lane": "yours",
+      "entry": 1794834000,
+      "started": null,
+      "ended": null,
+      "urgency": 9.6,
+      "reference": null,
+      "has_note": true,
+      "visits": [
+        {
+          "at": 1794924000,
+          "text": "review notes addressed (aee583a)",
+          "shas": [
+            "aee583a"
+          ]
+        }
+      ],
+      "frees": [
+        "a7789f4e-8738-4828-a934-8ec3aa63864d",
+        "8a30faaa-03d7-4be2-af0f-6dd2e2f69d45"
+      ],
+      "waits_on": [],
+      "activity": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      "hold": null
+    },
+    {
+      "uuid": "54bdc53d-8d67-42a1-a723-12ef4ac4d440",
+      "title": "Checkout: playtest on a real phone",
+      "project": "storefront",
+      "priority": "H",
+      "tags": [],
+      "yours": true,
+      "decision": false,
+      "alarm": false,
+      "blocked": true,
+      "lane": "yours",
+      "entry": 1794762000,
+      "started": null,
+      "ended": null,
+      "urgency": 10.7,
+      "reference": null,
+      "has_note": true,
+      "visits": [
+        {
+          "at": 1794846000,
+          "text": "measured before and after: 23% faster (b3e1154)",
+          "shas": [
+            "b3e1154"
+          ]
+        },
+        {
+          "at": 1794930000,
+          "text": "split the work; review next (af83a23)",
+          "shas": [
+            "af83a23"
+          ]
+        }
+      ],
+      "frees": [
+        "c936dd7b-4ba9-4424-afe4-d0e6d625afe0",
+        "36f5602a-5757-4396-abe7-9e9588f3778a"
+      ],
+      "waits_on": [
+        "a087f365-0229-49c4-aa49-9b82aec0b942"
+      ],
+      "activity": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0
+      ],
+      "hold": null
+    },
+    {
+      "uuid": "516a5744-64bd-4724-aee0-9ed1fe53b966",
+      "title": "Sign the release key",
+      "project": "android",
+      "priority": "M",
+      "tags": [],
+      "yours": true,
+      "decision": false,
+      "alarm": false,
+      "blocked": false,
+      "lane": "yours",
+      "entry": 1794582000,
+      "started": null,
+      "ended": null,
+      "urgency": 6.6,
+      "reference": null,
+      "has_note": true,
+      "visits": [
+        {
+          "at": 1794726000,
+          "text": "split the work; review next (bd844b9)",
+          "shas": [
+            "bd844b9"
+          ]
+        },
+        {
+          "at": 1794870000,
+          "text": "review notes addressed (f2abed4)",
+          "shas": [
+            "f2abed4"
+          ]
+        }
+      ],
+      "frees": [
+        "f4f5ed14-b045-4afb-a392-bab8b8b57cf5"
+      ],
+      "waits_on": [],
+      "activity": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0
+      ],
+      "hold": null
+    }
+  ],
+  "more": 6,
+  "options": {
+    "9c746214-3f97-42de-ac4a-c82b2c478557": [
+      "10% for the first week",
+      "Free shipping, no discount",
+      "No offer at launch"
+    ],
+    "a98912a9-6cce-4f03-a375-24ae20247a04": [
+      "Round half to even",
+      "Give the odd cent to the largest line"
+    ]
+  }
+}
