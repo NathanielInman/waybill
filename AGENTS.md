@@ -8,8 +8,10 @@ for whatever you change.
 - `waybill-core`: the model and the protocol. `task.rs` reads what
   `task export` prints, `model.rs` sorts tasks into lanes and works out what
   each one frees, `lines.rs` lays dependency chains out as rail lines,
-  `pulse.rs` counts what the charts draw, `lamp.rs` is the one lamp rule.
-  Those are plain data in, plain data out: callers pass `now` and a `Zone`.
+  `pulse.rs` counts what the charts draw, `lamp.rs` is the one lamp rule,
+  `plan.rs` is where each view puts its cards (lane order, the Desk's
+  sections, what fits in the drawer) and `theme.rs` is the palette. Those
+  are plain data in, plain data out: callers pass `now` and a `Zone`.
   `act.rs` is every change to the list (each one a `task` command),
   `say.rs` is what the user can say to it from any screen (the actions,
   the buttons a card offers, the `/` line's words, what a drop means),
@@ -21,8 +23,9 @@ for whatever you change.
 - `waybill-board`: the GTK4 window and the drawer. `shell.rs` is the frame,
   `views/` holds one file per view, `detail.rs` is the card pane (its
   buttons come from `say::offers`), `drawer.rs` is the layer-shell drawer,
-  and everything drawn with cairo is in `charts.rs`. `theme.rs` owns the palette, which feeds both the CSS and
-  the charts. `anim.rs` and `stage.rs` came from Tablet's board.
+  and everything drawn with cairo is in `charts.rs`. `theme.rs` holds the
+  core's palette for the drawing thread; it feeds both the CSS and the
+  charts. `anim.rs` and `stage.rs` came from Tablet's board.
 - `bar-anchor` is no longer in this repo: it's the shared
   [bar-anchor](https://github.com/NathanielInman/bar-anchor) crate, pinned by tag in the root `Cargo.toml`.
   Change it there and move the tag; its `Anchor` JSON must stay

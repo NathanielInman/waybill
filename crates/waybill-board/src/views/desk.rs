@@ -8,6 +8,7 @@ use crate::ui::{self, chip, hbox, label, vbox};
 use gtk::prelude::*;
 use std::rc::Rc;
 use waybill_core::model::{Card, Lane, Snapshot};
+use waybill_core::plan;
 use waybill_core::say::Action;
 
 pub struct DeskView {
@@ -72,42 +73,28 @@ impl DeskView {
     pub fn set(&self, s: &Snapshot) {
         let pal = theme::current();
         let p = &s.pulse;
-        let yours = s.lane(Lane::Yours);
         let warn = pal.warn.hex();
-        let mut text = match yours.len() {
-            0 => "Nothing is waiting on you.".to_string(),
-            1 => "One task waits on you.".to_string(),
-            n => format!("{n} tasks wait on you."),
-        };
-        if p.holding > 0 {
+        let head = plan::headline(s);
+        let mut text = ui::esc(&head.count);
+        if let Some(holding) = &head.holding {
             text.push_str(&format!(
-                " <span foreground=\"{warn}\">{} of them hold{} up {} other{}.</span>",
-                p.holding,
-                if p.holding == 1 { "s" } else { "" },
-                p.held_up,
-                if p.held_up == 1 { "" } else { "s" },
+                " <span foreground=\"{warn}\">{}</span>",
+                ui::esc(holding)
             ));
         }
         self.headline.set_markup(&text);
 
         ui::clear(&self.list);
-        let most = yours
-            .iter()
-            .map(|c| c.frees.len())
-            .max()
-            .unwrap_or(0)
-            .max(1);
-        let freeing: Vec<&&Card> = yours.iter().filter(|c| !c.frees.is_empty()).collect();
+        let desk = plan::desk(s);
+        let most = desk.most;
+        let freeing = &desk.frees;
         if !freeing.is_empty() {
             self.list.append(&label("Frees the most", &["section"]));
             for c in freeing {
                 self.list.append(&row(s, c, most, &self.tx));
             }
         }
-        let decisions: Vec<&&Card> = yours
-            .iter()
-            .filter(|c| c.decision && c.frees.is_empty())
-            .collect();
+        let decisions = &desk.decisions;
         if !decisions.is_empty() {
             self.list.append(&label("Decisions", &["section"]));
             for c in decisions {
@@ -137,26 +124,14 @@ impl DeskView {
                 }
             }
         }
-        let rest: Vec<&&Card> = yours
-            .iter()
-            .filter(|c| !c.decision && c.frees.is_empty())
-            .collect();
-        let mut projects: Vec<&str> = rest.iter().map(|c| c.project.as_str()).collect();
-        projects.sort();
-        projects.dedup();
-        // The project with the most to do comes first.
-        projects
-            .sort_by_key(|p| std::cmp::Reverse(rest.iter().filter(|c| c.project == *p).count()));
-        if !rest.is_empty() {
+        if !desk.hands.is_empty() {
             self.list
                 .append(&label("Your hands, by project", &["section"]));
         }
-        for project in projects {
-            for c in rest.iter().filter(|c| c.project == project) {
-                self.list.append(&row(s, c, most, &self.tx));
-            }
+        for c in &desk.hands {
+            self.list.append(&row(s, c, most, &self.tx));
         }
-        if yours.is_empty() {
+        if s.lane(Lane::Yours).is_empty() {
             self.list.append(&ui::wrapped(
                 "Tasks tagged for your hands, and decisions, show up here.",
                 &["empty"],

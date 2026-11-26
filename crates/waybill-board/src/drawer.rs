@@ -18,14 +18,13 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 use waybill_core::clock;
-use waybill_core::model::{Card, Lane, Snapshot};
+use waybill_core::model::{Card, Snapshot};
+use waybill_core::plan;
 use waybill_core::say::{self, Action};
 
 const WIDTH: f64 = 460.0;
 const MAX_HEIGHT: f64 = 780.0;
 const GAP: f64 = 8.0;
-/// How many of the user's tasks the drawer lists before it says "and more".
-const ROWS: usize = 6;
 
 pub struct Drawer {
     window: gtk::ApplicationWindow,
@@ -266,46 +265,35 @@ impl Drawer {
             "{} ready · {} doing",
             p.lanes.ready, p.lanes.doing
         ));
-        let yours = s.lane(Lane::Yours);
-        let mut text = match (&s.error, yours.len()) {
-            (Some(e), _) => ui::esc(&format!("The task list could not be read: {e}")),
-            (None, 0) => "Nothing is waiting on you.".to_string(),
-            (None, 1) => "One task waits on you.".to_string(),
-            (None, n) => format!("{n} tasks wait on you."),
+        let head = plan::headline(&s);
+        let mut text = match &s.error {
+            Some(e) => ui::esc(&format!("The task list could not be read: {e}")),
+            None => ui::esc(&head.count),
         };
-        let alarms = waybill_core::lamp::alarms(&s);
-        if !alarms.is_empty() {
-            let what = if alarms.len() == 1 {
-                "Something broke".to_string()
-            } else {
-                format!("{} things broke", alarms.len())
-            };
+        if let Some(broke) = &head.broke {
             text = format!(
-                "<span foreground=\"{}\" weight=\"bold\">{what}.</span> {text}",
-                pal.bad.hex()
+                "<span foreground=\"{}\" weight=\"bold\">{}</span> {text}",
+                pal.bad.hex(),
+                ui::esc(broke)
             );
         }
-        if p.holding > 0 {
+        if let Some(holding) = &head.holding {
             text.push_str(&format!(
-                " <span foreground=\"{}\">{} of them hold{} up {} other{}.</span>",
+                " <span foreground=\"{}\">{}</span>",
                 pal.warn.hex(),
-                p.holding,
-                if p.holding == 1 { "s" } else { "" },
-                p.held_up,
-                if p.held_up == 1 { "" } else { "s" },
+                ui::esc(holding)
             ));
         }
         self.headline.set_markup(&text);
 
         ui::clear(&self.list);
+        let drawer = plan::drawer(&s);
         // Alarms first: something broke, and it is not on the user's lane.
-        for c in alarms.iter().take(3) {
+        for c in &drawer.alarms {
             self.list.append(&self.row(c));
         }
         // Then decisions: they are the ones a click here can settle.
-        let (decisions, rest): (Vec<&Card>, Vec<&Card>) =
-            yours.iter().filter(|c| !c.alarm).partition(|c| c.decision);
-        for c in decisions.iter().take(3) {
+        for c in &drawer.decisions {
             self.list.append(&self.row(c));
             let options = self.world.options(c);
             if !options.is_empty() {
@@ -330,16 +318,12 @@ impl Drawer {
                 self.list.append(&strip);
             }
         }
-        let shown = ROWS.saturating_sub(decisions.len().min(3));
-        for c in rest.iter().take(shown) {
+        for c in &drawer.rest {
             self.list.append(&self.row(c));
         }
-        let more = yours
-            .len()
-            .saturating_sub(decisions.len().min(3) + rest.len().min(shown));
-        if more > 0 {
+        if drawer.more > 0 {
             self.list.append(&label(
-                &format!("and {more} more on the board"),
+                &format!("and {} more on the board", drawer.more),
                 &["dim", "small"],
             ));
         }
