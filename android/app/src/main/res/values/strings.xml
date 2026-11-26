@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Waybill</string>
+    <string name="widget_name">Waybill: what waits on you</string>
+    <string name="widget_description">The lamp, your queue and the day\'s count, from your desk</string>
+</resources>
