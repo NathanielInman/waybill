@@ -26,3 +26,4 @@ pub mod say;
 pub mod task;
 pub mod theme;
 pub mod waybar;
+pub mod wire;

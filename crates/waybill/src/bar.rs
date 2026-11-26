@@ -11,7 +11,7 @@ use waybill_core::config::Config;
 
 /// What the task database and the claims look like on disk right now. A
 /// change in any of it means the list may have changed.
-fn signature(dirs: &[PathBuf]) -> Vec<(PathBuf, Option<SystemTime>, u64)> {
+pub(crate) fn signature(dirs: &[PathBuf]) -> Vec<(PathBuf, Option<SystemTime>, u64)> {
     let mut out = Vec::new();
     for dir in dirs {
         let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)

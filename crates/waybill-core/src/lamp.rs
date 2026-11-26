@@ -16,6 +16,19 @@ pub enum State {
     Error,
 }
 
+impl State {
+    /// The name the bar module and the phone use: `calm`, `needs-you`,
+    /// `alarm` or `error`.
+    pub fn class(self) -> &'static str {
+        match self {
+            State::Calm => "calm",
+            State::NeedsYou => "needs-you",
+            State::Alarm => "alarm",
+            State::Error => "error",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lamp {
     pub state: State,
@@ -125,12 +138,7 @@ pub fn bar_line(s: &Snapshot, cfg: &BarCfg) -> BarLine {
     BarLine {
         text,
         tooltip: tooltip.join("\n"),
-        class: match lamp.state {
-            State::Calm => "calm",
-            State::NeedsYou => "needs-you",
-            State::Alarm => "alarm",
-            State::Error => "error",
-        },
+        class: lamp.state.class(),
     }
 }
 

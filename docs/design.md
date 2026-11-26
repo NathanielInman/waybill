@@ -295,6 +295,9 @@ not parse is ignored with a message and the defaults are used.
 | `theme.from` | `"waybar"` | `"waybar"` or `"none"`. |
 | `theme.font` | the bar's | Font family for the window and charts. |
 | `theme.accent` | the bar's | The accent color. |
+| `serve.listen` | `"0.0.0.0:8446"` | Where `waybill serve` listens. |
+| `serve.url` | `""` | The address the phone uses; empty means this machine's LAN address and the port. |
+| `serve.cert`, `serve.key` | `""` | A PEM certificate and key: with them the server speaks HTTPS. |
 
 `WAYBILL_CONFIG_DIR` moves the config folder and `WAYBILL_RUNTIME_DIR` the
 claims and the drawer's socket.
@@ -507,6 +510,71 @@ user's tasks by what they free. A click on a row opens the
 board on that card (`waybill-board --card <uuid>`). Esc or a click outside
 closes it. Under a compositor without layer-shell it opens as a plain window.
 
+## The phone
+
+The phone app is a second screen for the same model. It never reads
+Taskwarrior and decides nothing: `waybill serve` sends it what the board
+would draw, and it sends back the words the board's `/` line reads.
+
+```mermaid
+flowchart LR
+  C["waybill-core<br/>model, plan, say, theme"] --> W["wire.rs<br/>Screen, Glance, Page"]
+  W --> S["waybill serve"]
+  S -- "JSON over HTTP(S)" --> P["Android app"]
+  P -- "words: rule Keep 4 s" --> S
+  S -- "say::perform" --> T["task commands"]
+```
+
+Three things moved into the core so every screen shares them:
+
+- **`say.rs`**: the actions, `offers` (the buttons a card shows, each with
+  its label, its key on the board and the words it sends), `parse` (the
+  `/` line), `dropped` (what a drop on a lane means) and `perform`.
+- **`plan.rs`**: where each view puts its cards: the lanes in board order,
+  the Desk's three sections, what fits in the drawer, the headline.
+- **`theme.rs`**: the palette, including colors borrowed from waybar, and
+  each project's color.
+
+`wire.rs` builds what goes over the wire from those:
+
+| Payload | Holds |
+|---|---|
+| `Screen` | The snapshot, the lamp, the headline, the columns, the Desk, the drawer, the views, every open decision's options, the palette and each project's color. |
+| `Glance` | The drawer's cards in full, the lamp, the lane counts and two weeks of finished tasks: what the widget, the tile and notifications need. |
+| `Page` | One card's note, laid out by `note.rs` into blocks of spans, and the buttons it offers. |
+
+A `wire` number in each payload goes up when a change would break an
+older phone.
+
+### `waybill serve`
+
+A small HTTP/1.1 server in the `waybill` binary, one thread per request.
+Every request carries `Authorization: Bearer <token>`; the token is made on
+first use and kept in `phone.token` beside the config (mode 0600).
+
+| Route | Answers |
+|---|---|
+| `GET /v1/hello` | The wire version, the list's version, who the user is, whether it is the read-only demo. |
+| `GET /v1/screen?after=N` | The `Screen`. With `after`, it waits up to 25 seconds for a version newer than `N`, so an open app follows the list without polling. |
+| `GET /v1/glance` | The `Glance`. |
+| `GET /v1/card/<uuid>` | The card's `Page`. |
+| `POST /v1/say` | `{"text", "card"}`: the words go through `say::parse`; an action runs through `say::perform` and the answer says what happened. A view's name answers with the view. |
+| `POST /v1/add` | `{"title", "project", "priority", "mine", "note"}`: a new task. |
+
+It rereads the list the way the bar module does: when a file under
+`data.location`, the notes folder or the claims changes (checked every 2
+seconds), after each write it runs, and every minute. A reread that finds
+nothing new keeps the version, so a waiting phone is not woken for
+nothing.
+
+With `serve.cert` and `serve.key` it speaks HTTPS (rustls). Without them
+it is plain HTTP, which anyone on the network can read; `waybill pair` says
+so. `--demo` serves the made-up list read-only, for screenshots.
+
+`waybill pair` prints `waybill://pair?url=<url>&token=<token>` and, when
+`qrencode` is installed, a QR code of it. The phone's camera opens the
+link in the app. `--new` makes a new token, which unpairs the old phone.
+
 ## Command line
 
 `waybill --help` lists every command. All of them take `--json`; `snapshot`
@@ -517,7 +585,8 @@ and exits 1.
 the config, `task _version` (3 or newer), `data.location`, an export, the
 `ref` UDA, the notes folder, the waybar config and the `waybill bar` process
 under waybar, the compositor, `waybill-board` beside `waybill`, GTK 4 and
-gtk4-layer-shell, and the launcher entry. It only reads, and exits 1 when a
+gtk4-layer-shell, the launcher entry, and the phone (paired or not, and
+whether the HTTPS certificate loads). It only reads, and exits 1 when a
 check fails.
 
 `waybill-board` takes `--demo`, `--card <uuid>`, `--fullscreen`, `--windowed`

@@ -12,6 +12,33 @@ pub struct Config {
     pub lint: LintCfg,
     pub bar: BarCfg,
     pub board: BoardCfg,
+    pub serve: ServeCfg,
+}
+
+/// `waybill serve`, which the phone app reads the list from.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct ServeCfg {
+    /// The address to listen on.
+    pub listen: String,
+    /// The address the phone uses, as `waybill pair` hands it over. Empty
+    /// means this machine's LAN address and the listening port.
+    pub url: String,
+    /// A certificate and its key (PEM) to serve HTTPS with. Without them
+    /// the server speaks plain HTTP, fit only for a network you trust.
+    pub cert: String,
+    pub key: String,
+}
+
+impl Default for ServeCfg {
+    fn default() -> Self {
+        ServeCfg {
+            listen: "0.0.0.0:8446".into(),
+            url: String::new(),
+            cert: String::new(),
+            key: String::new(),
+        }
+    }
 }
 
 /// How the board's window behaves.

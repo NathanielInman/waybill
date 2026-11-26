@@ -14,7 +14,7 @@ pub enum Block {
     Code(String),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Span {
     pub text: String,
     pub code: bool,

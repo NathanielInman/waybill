@@ -39,6 +39,17 @@ format_alarm = "● {alarms}"
 # compositor size it (alone on a workspace, it fills the workspace).
 fullscreen = false
 
+[serve]
+# `waybill serve`, which the phone app reads the list from.
+listen = "0.0.0.0:8446"
+# The address the phone uses. Empty means this machine's LAN address and
+# the port above.
+url = ""
+# A certificate and key (PEM) to serve HTTPS with. Without them it speaks
+# plain HTTP, fit only for a network you trust.
+cert = ""
+key = ""
+
 [theme]
 # "waybar" borrows the bar's colors and font from ~/.config/waybar/style.css.
 # "none" keeps the built-in theme.

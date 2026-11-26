@@ -3,6 +3,7 @@
 //! waybar runs `waybill bar`.
 
 mod bar;
+mod serve;
 
 use anyhow::{Context, bail};
 use serde::Serialize;
@@ -55,11 +56,19 @@ The bar:
   waybill bar                           The waybar module (prints a line per change)
   waybill toggle                        Open or close the Desk drawer
 
+The phone:
+  waybill serve [--listen ADDR]         Serve the list to the phone app (serve.* in
+                                        the config sets the address and HTTPS)
+  waybill pair [--url URL] [--new]      Show the link and QR code that pair a
+                                        phone; --new unpairs the old one
+
 ID is a task's uuid or its first 8 characters. --demo reads a made-up list.
 The board itself is `waybill-board`.";
 
 /// Flags that take a value. Everything else starting with `--` is a switch.
-const VALUED: [&str; 14] = [
+const VALUED: [&str; 16] = [
+    "--listen",
+    "--url",
     "--set",
     "--set-file",
     "--append",
@@ -579,6 +588,8 @@ fn run() -> anyhow::Result<()> {
             Ok(())
         }
         "bar" => bar::run(demo),
+        "serve" => serve::run(demo, a.one("--listen")),
+        "pair" => serve::pair(a.has("--new"), a.one("--url")),
         "toggle" => bar::toggle(),
         "--version" | "-V" => {
             println!("waybill {}", env!("CARGO_PKG_VERSION"));
@@ -626,6 +637,7 @@ fn doctor() -> Vec<waybill_core::doctor::Check> {
     });
     checks.extend(doctor::libraries());
     checks.push(doctor::desktop_entry());
+    checks.push(serve::check(&cfg));
     checks
 }
 
